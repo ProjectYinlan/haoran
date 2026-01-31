@@ -17,9 +17,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "better-sqlite3": "^11.10.0",
+    "js-yaml": "^4.1.1",
     "node-napcat-ts": "^0.4.20",
     "openai": "^4.104.0",
+    "pg": "^8.18.0",
     "pino": "^9.14.0",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.28",
@@ -27,6 +28,7 @@
   },
   "type": "module",
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.19.7",
     "cross-env": "^7.0.3",
     "pino-pretty": "^13.1.3",

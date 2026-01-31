@@ -49,7 +49,7 @@ export default class QuestionModule extends BaseCommand {
     @Args() args: string[],
   ) {
     if (!this.enabled) {
-      await message.quick_action([
+      await message.reply([
         Structs.text('模块未启用')
       ])
       return
@@ -60,7 +60,7 @@ export default class QuestionModule extends BaseCommand {
     const question = args.join(' ')
 
     if (!question) {
-      await message.quick_action([
+      await message.reply([
         Structs.text('请输入问题')
       ])
       return
@@ -71,7 +71,7 @@ export default class QuestionModule extends BaseCommand {
       messages: [{ role: 'user', content: question }],
     })
 
-    await message.quick_action([
+    await message.reply([
       Structs.text(response?.choices[0].message.content ?? '没有回答')
     ])
   }

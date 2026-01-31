@@ -5,29 +5,28 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn } from 'typeor
 })
 export default class UtilRecord {
   @PrimaryGeneratedColumn({
-    type: 'integer'
+    type: 'bigint'
   })
   id: number
 
   @Column({
-    type: 'integer'
+    type: 'bigint'
   })
   userId: number
 
   @Column({
-    type: 'integer',
+    type: 'bigint',
     nullable: true
   })
   groupId?: number
 
   @Column({
-    type: 'varchar',
-    length: 255
+    type: 'text',
   })
   commandName: string
 
   @CreateDateColumn({
-    type: 'datetime',
+    type: 'timestamp',
   })
   usedAt: Date
 } 

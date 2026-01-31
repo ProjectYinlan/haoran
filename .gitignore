@@ -10,7 +10,7 @@ dist
 
 .idea
 
-config.json
+config.yaml
 
 src/external-modules/*
 !src/external-modules/example

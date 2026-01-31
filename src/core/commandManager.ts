@@ -30,7 +30,7 @@ export class CommandManager {
   async handleCommand(bot: NCWebsocket, message: EnhancedMessage, command: string, args: string[]) {
     const cmd = this.commands.get(command)
     if (!cmd) {
-      await message.quick_action([
+      await message.reply([
         Structs.text("未知命令")
       ])
     }
@@ -47,7 +47,7 @@ export class CommandManager {
       } catch (error) {
         logger.error('命令执行错误: ')
         logger.error(error)
-        await message.quick_action([
+        await message.reply([
           Structs.text("命令执行出错")
         ])
       }

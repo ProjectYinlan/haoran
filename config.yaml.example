@@ -1,0 +1,38 @@
+# 配置示例（YAML）
+ob:
+  # 连接方式：ws 或 wss
+  protocol: ws
+  # 服务器地址
+  host: 127.0.0.1
+  # 端口
+  port: 3001
+  # 若提供 baseUrl，则可不填写 protocol/host/port
+  # baseUrl: ws://127.0.0.1:3001
+
+  # 可选：访问令牌
+  # accessToken: your-token
+
+  # 可选：是否抛出 Promise（按需）
+  # throwPromise: true
+
+  # 可选：自动重连配置
+  # reconnection:
+  #   enable: true
+  #   attempts: 5
+  #   delay: 1000
+
+# 数据库配置
+# db:
+#   type: postgres
+#   host: 127.0.0.1
+#   port: 5432
+#   username: postgres
+#   password: password
+#   database: haoran
+#   # synchronize: false
+#   # logging: false
+
+# 可选：模块配置（按模块名填）
+# modules:
+#   example-module:
+#     enabled: true

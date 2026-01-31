@@ -63,12 +63,16 @@ export const createDataSource = async () => {
 
   logger.info(`加载 ${entities.length} 个实体`)
 
-  dataSource = new DataSource(config.db as unknown as (DataSourceOptions & undefined) || {
-    type: 'better-sqlite3',
-    database: './data.db',
+  dataSource = new DataSource({
+    type: 'postgres',
+    database: config.db?.database,
+    host: config.db?.host,
+    port: config.db?.port,
+    username: config.db?.username,
+    password: config.db?.password,
     entities,
     migrations,
-    synchronize: true,
+    synchronize: config.db?.synchronize,
     logging: process.env.LOG_LEVEL === 'DEBUG',
   })
 

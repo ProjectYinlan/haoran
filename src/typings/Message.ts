@@ -1,4 +1,4 @@
-import type { PrivateFriendMessage, PrivateGroupMessage, GroupMessage, Send, MessageType } from 'node-napcat-ts'
+import type { PrivateFriendMessage, PrivateGroupMessage, GroupMessage, MessageType, SendMessageSegment } from 'node-napcat-ts'
 
 export type Message = PrivateFriendMessage | PrivateGroupMessage | GroupMessage
 
@@ -33,6 +33,6 @@ export type QuotedMessage = ({
 } & MessageType
 
 export type EnhancedMessage = Message & {
-  reply: (message: Send[keyof Send][]) => Promise<void>,
+  reply: (reply: SendMessageSegment[]) => Promise<{ message_id: number }>,
   getQuoteMessage: () => Promise<QuotedMessage | undefined>
 }
