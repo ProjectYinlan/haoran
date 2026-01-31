@@ -23,7 +23,7 @@ export default class ExampleModule extends BaseCommand {
       usedAt: new Date()
     })
 
-    await message.quick_action([
+    await message.reply([
       Structs.text('pong!')
     ])
   }
@@ -42,7 +42,7 @@ export default class ExampleModule extends BaseCommand {
       }
     })
 
-    await message.quick_action([
+    await message.reply([
       Structs.text(lastPing ? `最后一次 ping 在 ${lastPing.usedAt.toLocaleString()}` : '还没有 ping 过')
     ])
   }

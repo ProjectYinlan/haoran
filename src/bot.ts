@@ -57,7 +57,7 @@ export async function connect() {
     await bot.connect()
     logger.info("Onebot 连接成功")
 
-    logger.info(`好友 ${(await bot.get_friend_list()).length} 个`)
+    logger.info(`登录账号=${(await bot.get_login_info()).user_id}, 好友数=${(await bot.get_friend_list()).length}, 群聊数=${(await bot.get_group_list()).length}`)
   } catch (error) {
     logger.error("Onebot 连接失败: ", error)
     process.exit(1)

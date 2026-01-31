@@ -13,7 +13,7 @@ export default class ExternalExampleModule extends BaseCommand {
     @Message() message: EnhancedMessage,
   ) {
     const name = message.sender.nickname
-    await message.quick_action([
+    await message.reply([
       Structs.text(`你好，${name}！`)
     ])
   }
