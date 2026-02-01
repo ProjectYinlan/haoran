@@ -12,6 +12,7 @@ export async function connect() {
     const bot = new NCWebsocket(config.ob, false)
     const commandManager = new CommandManager()
     const moduleLoader = ModuleLoader.getInstance(commandManager)
+    const globalPrefix = config.command?.globalPrefix || '.'
 
     // 加载所有模块
     moduleLoader.loadModules()
@@ -24,7 +25,7 @@ export async function connect() {
         return text
       }, "")
 
-      if (!msg.startsWith('.')) return
+      if (!msg.startsWith(globalPrefix || '.')) return
 
       // 二次封装 message，添加 reply 方法用于快速回复
       const enhancedMessage: EnhancedMessage = {

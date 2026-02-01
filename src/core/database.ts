@@ -1,18 +1,14 @@
 import { DataSource, DataSourceOptions } from 'typeorm'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { join } from 'path'
 import { readdir } from 'fs/promises'
 import { createLogger } from '../logger.js'
 import { config } from '../config.js'
+import { modulesPath, externalModulesPath } from '../utils/path.js'
 
 const logger = createLogger('core/database')
 
 // 获取所有模块的实体和迁移文件
 const getModuleEntities = async () => {
-  const baseDir = dirname(fileURLToPath(import.meta.url))
-  const modulesPath = join(baseDir, '../modules')
-  const externalModulesPath = join(baseDir, '../external-modules')
-
   const entities: any[] = []
   const migrations: any[] = []
 

@@ -16,3 +16,5 @@ src/external-modules/*
 !src/external-modules/example
 
 data.db
+
+assets/fonts/

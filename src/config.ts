@@ -32,7 +32,10 @@ const configSchema = z.object({
     synchronize: z.boolean().optional(),
     logging: z.boolean().optional()
   }).optional(),
-  modules: z.any().optional()
+  modules: z.any().optional(),
+  command: z.object({
+    globalPrefix: z.string().optional(),
+  }).optional()
 });
 
 if (!fs.existsSync('./config.yaml')) {
