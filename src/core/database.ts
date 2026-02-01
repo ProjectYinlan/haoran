@@ -81,7 +81,7 @@ export const createDataSource = async () => {
     logger.info('数据库连接成功')
     return dataSource
   } catch (error) {
-    logger.error('数据库连接失败:', error)
+    logger.error({ err: error }, '数据库连接失败')
     throw error
   }
 }

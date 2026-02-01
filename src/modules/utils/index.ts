@@ -3,6 +3,7 @@ import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 import UtilRecord from './entities/UtilRecord.js'
 import { getDataSource } from '../../core/database.js'
+import dayjs from 'dayjs'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
 
@@ -43,7 +44,7 @@ export default class ExampleModule extends BaseCommand {
     })
 
     await message.reply([
-      Structs.text(lastPing ? `最后一次 ping 在 ${lastPing.usedAt.toLocaleString()}` : '还没有 ping 过')
+      Structs.text(lastPing ? `最后一次 ping 在 ${dayjs(lastPing.usedAt).format('YYYY-MM-DD HH:mm:ss')}` : '还没有 ping 过')
     ])
   }
 } 

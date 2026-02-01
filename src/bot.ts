@@ -30,7 +30,7 @@ export async function connect() {
       const enhancedMessage: EnhancedMessage = {
         ...message,
         reply: async (replyMessage) => {
-          await bot.send_msg({
+          return await bot.send_msg({
             user_id: message.sender.user_id,
             group_id: message.message_type === 'group' ? message.group_id : undefined,
             message: replyMessage
@@ -59,7 +59,7 @@ export async function connect() {
 
     logger.info(`登录账号=${(await bot.get_login_info()).user_id}, 好友数=${(await bot.get_friend_list()).length}, 群聊数=${(await bot.get_group_list()).length}`)
   } catch (error) {
-    logger.error("Onebot 连接失败: ", error)
+    logger.error({ err: error }, "Onebot 连接失败")
     process.exit(1)
   }
 }
