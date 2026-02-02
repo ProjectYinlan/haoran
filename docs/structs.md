@@ -43,7 +43,7 @@
 ### 基本模板
 
 ```ts
-import { BaseCommand, Command, Module, Permission, Message, Args } from '../../core/decorators.js'
+import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example } from '../../core/decorators.js'
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 
@@ -52,6 +52,8 @@ export default class DemoModule extends BaseCommand {
   initialize() {}
 
   @Command('hello', '打招呼')
+  @Usage('.hello <昵称>')
+  @Example('.hello haoran')
   @Permission('demo.hello')
   async handleHello(
     @Message() message: EnhancedMessage,
@@ -67,6 +69,8 @@ export default class DemoModule extends BaseCommand {
 说明：
 - `@Module('name')` 定义模块名。
 - `@Command('命令', '描述')` 定义命令名称（触发方式为 `.命令`）。
+- `@Usage('用法')` 描述指令用法（用于 help 展示）。
+- `@Example('示例')` 描述指令示例（可重复多次，用于 help 展示）。
 - `@Permission('permission.code')` 为命令添加权限标识，RBAC 会在执行前校验。
 - 参数装饰器来自 `decorators.ts`：
   - `@Message()` 完整消息
@@ -74,6 +78,14 @@ export default class DemoModule extends BaseCommand {
   - `@Content()` 原始文本内容
   - `@Sender()` 发送者
   - `@GroupId()` 群号
+
+## help 指令
+
+内置在 `utils` 模块，使用方式：
+
+- `.help` 列出可用模块
+- `.help <module>` 列出该模块下所有命令的描述、用法、示例
+- `.help <command>` 显示该命令的描述、用法、示例与所属模块
 
 ## Structs 消息构造与回复
 

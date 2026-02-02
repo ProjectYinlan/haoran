@@ -42,18 +42,55 @@ const configSchema = z.object({
       global: z.array(z.number()).optional(),
       groups: z.record(z.array(z.number())).optional()
     }).optional(),
-    rolePermissions: z.record(z.array(z.string())).optional()
+    rolePermissions: z.record(z.array(z.string())).optional(),
+    roleMembers: z.object({
+      global: z.record(z.array(z.number())).optional(),
+      groups: z.record(z.record(z.array(z.number()))).optional()
+    }).optional(),
+    userPermissions: z.object({
+      global: z.record(z.array(z.string())).optional(),
+      groups: z.record(z.record(z.array(z.string()))).optional()
+    }).optional()
   }).optional()
 });
 
-if (!fs.existsSync('./config.yaml')) {
-  logger.error('请先创建 config.yaml');
-  throw new Error('config.yaml not found');
+const CONFIG_PATH = './config.yaml'
+let watchStarted = false
+
+const loadConfigFromFile = () => {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    logger.error('请先创建 config.yaml');
+    throw new Error('config.yaml not found');
+  }
+
+  const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+  const configParsed = yaml.load(configRaw)
+  return configSchema.parse(configParsed)
 }
 
-const configRaw = fs.readFileSync('./config.yaml', 'utf-8');
-const configParsed = yaml.load(configRaw);
+export let config = loadConfigFromFile()
+export let modulesConfig = (config.modules ?? {}) as Record<string, any>
 
-export const config = configSchema.parse(configParsed);
+export const reloadConfig = () => {
+  try {
+    const nextConfig = loadConfigFromFile()
+    config = nextConfig
+    modulesConfig = (config.modules ?? {}) as Record<string, any>
+    logger.info('配置已重载')
+    return true
+  } catch (error) {
+    logger.error({ err: error }, '配置重载失败')
+    return false
+  }
+}
 
-export const modulesConfig = (config.modules ?? {}) as Record<string, any>;
+export const startConfigWatcher = () => {
+  if (watchStarted) return
+  watchStarted = true
+
+  fs.watchFile(CONFIG_PATH, { interval: 1000 }, (curr, prev) => {
+    if (curr.mtimeMs === prev.mtimeMs) return
+    logger.info('检测到配置变更，重载中')
+    reloadConfig()
+  })
+}

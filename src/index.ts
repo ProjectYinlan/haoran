@@ -3,6 +3,7 @@ import { connect } from "./bot.js";
 import { createLogger } from './logger.js';
 import { createDataSource } from './core/database.js'
 import { warmupTemplateRenderer } from './core/playwright.js'
+import { startConfigWatcher } from './config.js'
 
 const logger = createLogger('root');
 
@@ -15,6 +16,9 @@ async function main() {
 
     // 预热模板渲染器，避免首次渲染卡顿
     await warmupTemplateRenderer()
+
+    // 监听配置变更，支持权限热重载
+    startConfigWatcher()
 
     // 启动机器人
     await connect()

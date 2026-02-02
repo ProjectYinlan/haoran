@@ -1,4 +1,4 @@
-import { BaseCommand, Command, Module, Permission, Message, Args } from '../../core/decorators.js'
+import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example } from '../../core/decorators.js'
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 import OpenAI from 'openai'
@@ -43,6 +43,8 @@ export default class QuestionModule extends BaseCommand {
   }
 
   @Command('提问', 'llm 快速提问')
+  @Usage('.提问 <问题>')
+  @Example('.提问 你好')
   @Permission('question.ask')
   async handleAsk(
     @Message() message: EnhancedMessage,

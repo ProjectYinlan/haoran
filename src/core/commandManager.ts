@@ -6,14 +6,50 @@ import { PermissionManager } from './permissionManager.js'
 
 const logger = createLogger('core/command-manager')
 
+type CommandInfo = {
+  handler: Function
+  permission: string
+  name: string
+  description: string
+  moduleName: string
+  usage?: string
+  examples?: string[]
+}
+
 export class CommandManager {
-  private commands: Map<string, { handler: Function, permission: string }> = new Map()
+  private static instance?: CommandManager
+  private commands: Map<string, CommandInfo> = new Map()
   private modules: BaseCommand[] = []
   private permissionManager = new PermissionManager()
+
+  constructor() {
+    CommandManager.instance ??= this
+  }
+
+  static getInstance() {
+    return CommandManager.instance
+  }
+
+  getCommandList() {
+    return Array.from(this.commands.values())
+  }
+
+  getModules() {
+    return Array.from(new Set(this.getCommandList().map((command) => command.moduleName)))
+  }
+
+  getCommandsByModule(moduleName: string) {
+    return this.getCommandList().filter((command) => command.moduleName === moduleName)
+  }
+
+  getCommandByName(name: string) {
+    return this.commands.get(name)
+  }
 
   registerModule(module: BaseCommand) {
     this.modules.push(module)
     const moduleClass = module.constructor as any
+    const moduleName = module.moduleName || moduleClass.moduleName || 'unknown'
 
     if (moduleClass.commands) {
       for (const [name, command] of moduleClass.commands.entries()) {
@@ -21,7 +57,12 @@ export class CommandManager {
         const permission = moduleClass.permissions?.get(command.propertyKey) || ''
         this.commands.set(name, {
           handler: command.handler.bind(module),
-          permission
+          permission,
+          name,
+          description: command.description || '',
+          moduleName,
+          usage: command.usage,
+          examples: command.examples
         })
       }
     }

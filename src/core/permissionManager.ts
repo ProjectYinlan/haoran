@@ -25,18 +25,6 @@ const matchPermission = (rule: string, permission: string): boolean => {
 }
 
 export class PermissionManager {
-  private rolePermissions: Record<Role, string[]>
-
-  constructor() {
-    const overrides = config.rbac?.rolePermissions ?? {}
-    this.rolePermissions = {
-      [Role.Owner]: overrides.owner ?? DEFAULT_ROLE_PERMISSIONS[Role.Owner],
-      [Role.BotAdmin]: overrides.bot_admin ?? DEFAULT_ROLE_PERMISSIONS[Role.BotAdmin],
-      [Role.GroupAdmin]: overrides.group_admin ?? DEFAULT_ROLE_PERMISSIONS[Role.GroupAdmin],
-      [Role.Member]: overrides.member ?? DEFAULT_ROLE_PERMISSIONS[Role.Member]
-    }
-  }
-
   private isOwner(userId: number): boolean {
     return (config.rbac?.owners ?? []).includes(userId)
   }
@@ -59,23 +47,88 @@ export class PermissionManager {
     return role === 'owner' || role === 'admin'
   }
 
-  getRoles(message: EnhancedMessage): Role[] {
-    const roles = new Set<Role>()
+  private getRolePermissions(): Record<string, string[]> {
+    const overrides = config.rbac?.rolePermissions ?? {}
+    const rolePermissions: Record<string, string[]> = {
+      [Role.Owner]: overrides.owner ?? DEFAULT_ROLE_PERMISSIONS[Role.Owner],
+      [Role.BotAdmin]: overrides.bot_admin ?? DEFAULT_ROLE_PERMISSIONS[Role.BotAdmin],
+      [Role.GroupAdmin]: overrides.group_admin ?? DEFAULT_ROLE_PERMISSIONS[Role.GroupAdmin],
+      [Role.Member]: overrides.member ?? DEFAULT_ROLE_PERMISSIONS[Role.Member]
+    }
+
+    for (const [role, rules] of Object.entries(overrides)) {
+      if (!rolePermissions[role]) {
+        rolePermissions[role] = rules ?? []
+      }
+    }
+
+    return rolePermissions
+  }
+
+  private getCustomRoles(userId: number, groupId?: number): string[] {
+    const roleMembers = config.rbac?.roleMembers ?? {}
+    const roles = new Set<string>()
+
+    const globalRoles = roleMembers.global ?? {}
+    for (const [role, users] of Object.entries(globalRoles)) {
+      if (users.includes(userId)) roles.add(role)
+    }
+
+    if (groupId !== undefined) {
+      const groupRoles = roleMembers.groups?.[String(groupId)] ?? {}
+      for (const [role, users] of Object.entries(groupRoles)) {
+        if (users.includes(userId)) roles.add(role)
+      }
+    }
+
+    return Array.from(roles)
+  }
+
+  private getUserPermissionRules(userId: number, groupId?: number): string[] {
+    const userPermissions = config.rbac?.userPermissions ?? {}
+    const rules: string[] = []
+
+    const globalRules = userPermissions.global?.[String(userId)] ?? []
+    rules.push(...globalRules)
+
+    if (groupId !== undefined) {
+      const groupRules = userPermissions.groups?.[String(groupId)]?.[String(userId)] ?? []
+      rules.push(...groupRules)
+    }
+
+    return rules
+  }
+
+  getRoles(message: EnhancedMessage): string[] {
+    const roles = new Set<string>()
     const userId = message.sender.user_id
     const groupId = message.message_type === 'group' ? message.group_id : undefined
 
     if (this.isOwner(userId)) roles.add(Role.Owner)
     if (this.isBotAdmin(userId, groupId)) roles.add(Role.BotAdmin)
     if (this.isGroupAdmin(message)) roles.add(Role.GroupAdmin)
+    for (const role of this.getCustomRoles(userId, groupId)) {
+      roles.add(role)
+    }
+
     if (roles.size === 0) roles.add(Role.Member)
 
     return Array.from(roles)
   }
 
   hasPermission(message: EnhancedMessage, permission: string): boolean {
+    const userId = message.sender.user_id
+    const groupId = message.message_type === 'group' ? message.group_id : undefined
+
+    const userRules = this.getUserPermissionRules(userId, groupId)
+    if (userRules.some(rule => matchPermission(rule, permission))) {
+      return true
+    }
+
     const roles = this.getRoles(message)
+    const rolePermissions = this.getRolePermissions()
     for (const role of roles) {
-      const rules = this.rolePermissions[role] ?? []
+      const rules = rolePermissions[role] ?? []
       if (rules.some(rule => matchPermission(rule, permission))) {
         return true
       }

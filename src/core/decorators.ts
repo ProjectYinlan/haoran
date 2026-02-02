@@ -6,6 +6,8 @@ type CommandHandler = (ws: NCWebsocket, message: EnhancedMessage, args: string[]
 
 // 参数元数据键
 const PARAM_METADATA_KEY = Symbol('param_metadata')
+const USAGE_METADATA_KEY = Symbol('usage_metadata')
+const EXAMPLE_METADATA_KEY = Symbol('example_metadata')
 
 // 参数类型
 export enum ParamType {
@@ -46,6 +48,8 @@ export function Command(name: string, description: string = '') {
     // 获取参数元数据
     const paramMetadata: { index: number, type: ParamType }[] =
       Reflect.getMetadata(PARAM_METADATA_KEY, target, propertyKey) || []
+    const usage: string | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
+    const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
 
     // 包装原始方法
     const originalMethod = descriptor.value
@@ -88,7 +92,9 @@ export function Command(name: string, description: string = '') {
       handler: descriptor.value,
       description,
       name,
-      propertyKey
+      propertyKey,
+      usage,
+      examples
     })
   }
 }
@@ -103,6 +109,22 @@ export function Permission(permission: string) {
   }
 }
 
+// 用法装饰器
+export function Usage(usage: string) {
+  return function (target: any, propertyKey: string) {
+    Reflect.defineMetadata(USAGE_METADATA_KEY, usage, target, propertyKey)
+  }
+}
+
+// 示例装饰器
+export function Example(example: string | string[]) {
+  return function (target: any, propertyKey: string) {
+    const existing: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
+    const next = Array.isArray(example) ? example : [example]
+    Reflect.defineMetadata(EXAMPLE_METADATA_KEY, [...existing, ...next], target, propertyKey)
+  }
+}
+
 // 模块装饰器
 export function Module(name: string) {
   return function (constructor: Function) {
@@ -112,7 +134,7 @@ export function Module(name: string) {
 
 // 基础命令类
 export abstract class BaseCommand {
-  static commands: Map<string, { handler: CommandHandler, description: string, name: string }>
+  static commands: Map<string, { handler: CommandHandler, description: string, name: string, propertyKey: string, usage?: string, examples?: string[] }>
   static permissions: Map<string, string>
   static moduleName: string
 
