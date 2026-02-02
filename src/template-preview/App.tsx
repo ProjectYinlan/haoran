@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { Frame } from '../core/templates/Frame.js'
 import { templates } from './templateRegistry.js'
