@@ -72,9 +72,9 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('help', '查看指令帮助')
-  @Usage('.help <module|command>')
-  @Example('.help utils')
-  @Example('.help ping')
+  @Usage('help <module|command>')
+  @Example('help utils')
+  @Example('help ping')
   async handleHelp(
     @Message() message: EnhancedMessage,
     @Args() args: string[],
@@ -118,7 +118,7 @@ export default class ExampleModule extends BaseCommand {
       const commands = moduleCommands
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((command) => ({
-          name: command.name,
+          name: normalizePrefix(command.name),
           description: command.description || '无描述',
           usage: command.usage ? normalizePrefix(command.usage) : '未提供',
           examples: command.examples && command.examples.length > 0
@@ -147,7 +147,7 @@ export default class ExampleModule extends BaseCommand {
         title: '指令帮助',
         scope: 'command',
         moduleName: command.moduleName,
-        commandName: command.name,
+        commandName: normalizePrefix(command.name),
         description: command.description || '无描述',
         usage: command.usage ? normalizePrefix(command.usage) : '未提供',
         examples: command.examples && command.examples.length > 0
@@ -170,7 +170,7 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('ping', '测试机器人是否在线')
-  @Usage('.ping')
+  @Usage('ping')
   @Permission('utils.ping')
   async handlePing(
     @Message() message: EnhancedMessage,
@@ -188,7 +188,7 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('last-ping', '查看最近一次 ping 的时间')
-  @Usage('.last-ping')
+  @Usage('last-ping')
   @Permission('utils.last-ping')
   async handleLastPing(
     @Message() message: EnhancedMessage,
@@ -208,7 +208,7 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('whoami', '查看当前用户信息')
-  @Usage('.whoami')
+  @Usage('whoami')
   @Permission('utils.whoami')
   async handleWhoami(
     @Message() message: EnhancedMessage,
@@ -242,9 +242,9 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('perm-grant-user', '给指定用户赋予权限')
-  @Usage('.perm-grant-user <userId> <perm1,perm2> [groupId|global]')
-  @Example('.perm-grant-user 123456 utils.ping')
-  @Example('.perm-grant-user 123456 utils.ping,utils.whoami 987654')
+  @Usage('perm-grant-user <userId> <perm1,perm2> [groupId|global]')
+  @Example('perm-grant-user 123456 utils.ping')
+  @Example('perm-grant-user 123456 utils.ping,utils.whoami 987654')
   @Permission(MANAGE_PERMISSION)
   async handleGrantUserPermission(
     @Message() message: EnhancedMessage,
@@ -283,8 +283,8 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('perm-grant-role', '给指定角色赋予权限')
-  @Usage('.perm-grant-role <role> <perm1,perm2>')
-  @Example('.perm-grant-role botAdmin utils.ping,utils.whoami')
+  @Usage('perm-grant-role <role> <perm1,perm2>')
+  @Example('perm-grant-role botAdmin utils.ping,utils.whoami')
   @Permission(MANAGE_PERMISSION)
   async handleGrantRolePermission(
     @Message() message: EnhancedMessage,
@@ -313,8 +313,8 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('role-create', '创建自定义角色')
-  @Usage('.role-create <role> [perm1,perm2]')
-  @Example('.role-create moderator utils.ping')
+  @Usage('role-create <role> [perm1,perm2]')
+  @Example('role-create moderator utils.ping')
   @Permission(MANAGE_PERMISSION)
   async handleCreateRole(
     @Message() message: EnhancedMessage,
@@ -343,9 +343,9 @@ export default class ExampleModule extends BaseCommand {
   }
 
   @Command('role-add', '将用户加入角色')
-  @Usage('.role-add <role> <userId> [groupId|global]')
-  @Example('.role-add moderator 123456')
-  @Example('.role-add moderator 123456 987654')
+  @Usage('role-add <role> <userId> [groupId|global]')
+  @Example('role-add moderator 123456')
+  @Example('role-add moderator 123456 987654')
   @Permission(MANAGE_PERMISSION)
   async handleAddRoleMember(
     @Message() message: EnhancedMessage,

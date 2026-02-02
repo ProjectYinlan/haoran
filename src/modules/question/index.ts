@@ -42,8 +42,8 @@ export default class QuestionModule extends BaseCommand {
   }
 
   @Command('提问', 'llm 快速提问')
-  @Usage('.提问 <问题>')
-  @Example('.提问 你好')
+  @Usage('提问 <问题>')
+  @Example('提问 你好')
   @Permission('question.ask')
   async handleAsk(
     @Message() message: EnhancedMessage,

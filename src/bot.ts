@@ -12,12 +12,11 @@ export async function connect() {
     const bot = new NCWebsocket(configManager.config.ob, false)
     const commandManager = new CommandManager()
     const moduleLoader = ModuleLoader.getInstance(commandManager)
-    const globalPrefix = configManager.config.command?.globalPrefix || '.'
-
     // 加载所有模块
     moduleLoader.loadModules()
 
     bot.on('message', async (message: Message) => {
+      const globalPrefix = configManager.config.command?.globalPrefix || '.'
       const msg = message.message.reduce((text, content) => {
         if (content.type === 'text') {
           return text + content.data.text
@@ -50,7 +49,10 @@ export async function connect() {
         }
       };
 
-      const [command, ...args] = msg.slice(1).split(' ')
+      const [command, ...args] = msg
+        .slice(globalPrefix.length)
+        .trim()
+        .split(' ')
 
       await commandManager.handleCommand(bot, enhancedMessage, command, args)
     })
