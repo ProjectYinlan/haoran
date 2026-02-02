@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { connect } from "./bot.js";
 import { createLogger } from './logger.js';
 import { createDataSource } from './core/database.js'
-import { warmupSatori } from './core/satori.js'
+import { warmupTemplateRenderer } from './core/playwright.js'
 
 const logger = createLogger('root');
 
@@ -13,8 +13,8 @@ async function main() {
     // 初始化数据库
     await createDataSource()
 
-    // 预热 Satori，避免首次渲染卡顿
-    await warmupSatori()
+    // 预热模板渲染器，避免首次渲染卡顿
+    await warmupTemplateRenderer()
 
     // 启动机器人
     await connect()

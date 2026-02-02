@@ -22,9 +22,15 @@ const getModuleEntities = async () => {
           for (const file of entityFiles) {
             if (file.endsWith('.ts') || file.endsWith('.js')) {
               logger.debug(`检测到实体文件: ${file}`)
-              const entity = await import(`file://${join(path, item.name, file)}`)
-              if (entity.default) {
-                entities.push(entity.default)
+              const entityPath = `file://${join(path, item.name, file)}`
+              try {
+                const entity = await import(entityPath)
+                if (entity.default) {
+                  entities.push(entity.default)
+                }
+              } catch (error) {
+                logger.error({ err: error }, `加载实体文件失败: ${entityPath}`)
+                throw error
               }
             }
           }
@@ -33,9 +39,15 @@ const getModuleEntities = async () => {
           for (const file of migrationFiles) {
             if (file.endsWith('.ts') || file.endsWith('.js')) {
               logger.debug(`检测到迁移文件: ${file}`)
-              const migration = await import(`file://${join(path, item.name, file)}`)
-              if (migration.default) {
-                migrations.push(migration.default)
+              const migrationPath = `file://${join(path, item.name, file)}`
+              try {
+                const migration = await import(migrationPath)
+                if (migration.default) {
+                  migrations.push(migration.default)
+                }
+              } catch (error) {
+                logger.error({ err: error }, `加载迁移文件失败: ${migrationPath}`)
+                throw error
               }
             }
           }

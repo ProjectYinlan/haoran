@@ -4,11 +4,8 @@ import { EnhancedMessage } from '../../typings/Message.js'
 import UtilRecord from './entities/UtilRecord.js'
 import { getDataSource } from '../../core/database.js'
 import dayjs from 'dayjs'
-import satori from 'satori'
 import { UserProfile } from './templates/UserProfile.js'
-import fs from 'fs/promises'
-import path from 'path'
-import { renderTemplate } from '../../core/satori.js'
+import { renderTemplate } from '../../core/playwright.js'
 import { PermissionManager, Role } from '../../core/permissionManager.js'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
@@ -80,7 +77,7 @@ export default class ExampleModule extends BaseCommand {
         qq: message.sender.user_id,
         nickname: message.sender.nickname,
         permissionTag: roleTag?.label,
-        permissionTagColor: roleTag?.color
+        permissionTagColor: roleTag?.color,
       }), {
         width: 250,
         height: 100

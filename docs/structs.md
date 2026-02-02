@@ -89,6 +89,20 @@ await message.reply([
 
 `reply` 的参数是 `SendMessageSegment[]`，可组合多个结构体。
 
+## 模板渲染（图片）
+
+模板图片渲染由 `src/core/playwright.ts` 提供，业务模块直接传入组件：
+
+```ts
+await message.reply([
+  Structs.image(await renderTemplate(YourTemplate({
+    // 组件 props
+  })))
+])
+```
+
+渲染过程不会通过 URL 路由或 query 传参，数据通过 props 直接传入组件。
+
 ## 配置与模块配置
 
 配置文件为 `config.yaml`，入口读取在 `src/config.ts`。
