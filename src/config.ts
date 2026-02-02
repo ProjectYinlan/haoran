@@ -35,6 +35,14 @@ const configSchema = z.object({
   modules: z.any().optional(),
   command: z.object({
     globalPrefix: z.string().optional(),
+  }).optional(),
+  rbac: z.object({
+    owners: z.array(z.number()).optional(),
+    botAdmins: z.object({
+      global: z.array(z.number()).optional(),
+      groups: z.record(z.array(z.number())).optional()
+    }).optional(),
+    rolePermissions: z.record(z.array(z.string())).optional()
   }).optional()
 });
 

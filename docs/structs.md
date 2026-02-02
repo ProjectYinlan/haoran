@@ -67,7 +67,7 @@ export default class DemoModule extends BaseCommand {
 说明：
 - `@Module('name')` 定义模块名。
 - `@Command('命令', '描述')` 定义命令名称（触发方式为 `.命令`）。
-- `@Permission('permission.code')` 预留权限字段（目前未启用权限检查）。
+- `@Permission('permission.code')` 为命令添加权限标识，RBAC 会在执行前校验。
 - 参数装饰器来自 `decorators.ts`：
   - `@Message()` 完整消息
   - `@Args()` 参数数组（空格分隔）

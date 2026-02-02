@@ -9,8 +9,10 @@ import { UserProfile } from './templates/UserProfile.js'
 import fs from 'fs/promises'
 import path from 'path'
 import { renderTemplate } from '../../core/satori.js'
+import { PermissionManager, Role } from '../../core/permissionManager.js'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
+const permissionManager = new PermissionManager()
 
 @Module('utils')
 export default class ExampleModule extends BaseCommand {
@@ -58,10 +60,31 @@ export default class ExampleModule extends BaseCommand {
   async handleWhoami(
     @Message() message: EnhancedMessage,
   ) {
-    const avatarUrl = `https://q1.qlogo.cn/g?b=qq&nk=${message.sender.user_id}&s=640`
+    const roles = permissionManager.getRoles(message)
+    const primaryRole = roles.includes(Role.Owner)
+      ? Role.Owner
+      : roles.includes(Role.BotAdmin)
+        ? Role.BotAdmin
+        : roles.includes(Role.GroupAdmin)
+          ? Role.GroupAdmin
+          : undefined
+    const roleTagMap: Record<Exclude<Role, Role.Member>, { label: string, color: 'primary' | 'secondary' | 'tertiary' | 'success' | 'danger' | 'warning' | 'info' | 'light' | 'dark' }> = {
+      [Role.Owner]: { label: 'OWNER', color: 'danger' },
+      [Role.BotAdmin]: { label: 'BOT_ADMIN', color: 'primary' },
+      [Role.GroupAdmin]: { label: 'GROUP_ADMIN', color: 'warning' },
+    }
+    const roleTag = primaryRole ? roleTagMap[primaryRole] : undefined
 
     await message.reply([
-      Structs.image(await renderTemplate(UserProfile({ qq: message.sender.user_id, nickname: message.sender.nickname, avatarUrl })))
+      Structs.image(await renderTemplate(UserProfile({
+        qq: message.sender.user_id,
+        nickname: message.sender.nickname,
+        permissionTag: roleTag?.label,
+        permissionTagColor: roleTag?.color
+      }), {
+        width: 250,
+        height: 100
+      }))
     ])
   }
 } 

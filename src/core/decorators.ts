@@ -87,7 +87,8 @@ export function Command(name: string, description: string = '') {
     target.constructor.commands.set(name, {
       handler: descriptor.value,
       description,
-      name
+      name,
+      propertyKey
     })
   }
 }
