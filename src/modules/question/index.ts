@@ -2,7 +2,6 @@ import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 import OpenAI from 'openai'
-import { modulesConfig } from '../../config.js'
 import { createLogger } from '../../logger.js'
 import { questionConfig } from './schema.js'
 

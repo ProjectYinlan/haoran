@@ -1,4 +1,4 @@
-import { config } from '../config.js'
+import { configManager } from '../config.js'
 import { EnhancedMessage } from '../typings/Message.js'
 
 export enum Role {
@@ -26,11 +26,11 @@ const matchPermission = (rule: string, permission: string): boolean => {
 
 export class PermissionManager {
   private isOwner(userId: number): boolean {
-    return (config.rbac?.owners ?? []).includes(userId)
+    return (configManager.config.rbac?.owners ?? []).includes(userId)
   }
 
   private isBotAdmin(userId: number, groupId?: number): boolean {
-    const botAdmins = config.rbac?.botAdmins
+    const botAdmins = configManager.config.rbac?.botAdmins
     if (!botAdmins) return false
 
     if (botAdmins.global?.includes(userId)) return true
@@ -48,7 +48,7 @@ export class PermissionManager {
   }
 
   private getRolePermissions(): Record<string, string[]> {
-    const overrides = config.rbac?.rolePermissions ?? {}
+    const overrides = configManager.config.rbac?.rolePermissions ?? {}
     const rolePermissions: Record<string, string[]> = {
       [Role.Owner]: overrides.owner ?? DEFAULT_ROLE_PERMISSIONS[Role.Owner],
       [Role.BotAdmin]: overrides.bot_admin ?? DEFAULT_ROLE_PERMISSIONS[Role.BotAdmin],
@@ -66,7 +66,7 @@ export class PermissionManager {
   }
 
   private getCustomRoles(userId: number, groupId?: number): string[] {
-    const roleMembers = config.rbac?.roleMembers ?? {}
+    const roleMembers = configManager.config.rbac?.roleMembers ?? {}
     const roles = new Set<string>()
 
     const globalRoles = roleMembers.global ?? {}
@@ -85,7 +85,7 @@ export class PermissionManager {
   }
 
   private getUserPermissionRules(userId: number, groupId?: number): string[] {
-    const userPermissions = config.rbac?.userPermissions ?? {}
+    const userPermissions = configManager.config.rbac?.userPermissions ?? {}
     const rules: string[] = []
 
     const globalRules = userPermissions.global?.[String(userId)] ?? []

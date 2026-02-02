@@ -3,7 +3,7 @@ import { connect } from "./bot.js";
 import { createLogger } from './logger.js';
 import { createDataSource } from './core/database.js'
 import { warmupTemplateRenderer } from './core/playwright.js'
-import { startConfigWatcher } from './config.js'
+import { configManager } from './config.js'
 
 const logger = createLogger('root');
 
@@ -18,7 +18,7 @@ async function main() {
     await warmupTemplateRenderer()
 
     // 监听配置变更，支持权限热重载
-    startConfigWatcher()
+    configManager.startWatcher()
 
     // 启动机器人
     await connect()

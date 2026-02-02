@@ -1,5 +1,5 @@
 import { NCWebsocket } from 'node-napcat-ts'
-import { config } from './config.js'
+import { configManager } from './config.js'
 import { CommandManager } from './core/commandManager.js'
 import { ModuleLoader } from './core/moduleLoader.js'
 import { Message, EnhancedMessage } from './typings/Message.js'
@@ -9,10 +9,10 @@ const logger = createLogger('bot')
 
 export async function connect() {
   try {
-    const bot = new NCWebsocket(config.ob, false)
+    const bot = new NCWebsocket(configManager.config.ob, false)
     const commandManager = new CommandManager()
     const moduleLoader = ModuleLoader.getInstance(commandManager)
-    const globalPrefix = config.command?.globalPrefix || '.'
+    const globalPrefix = configManager.config.command?.globalPrefix || '.'
 
     // 加载所有模块
     moduleLoader.loadModules()

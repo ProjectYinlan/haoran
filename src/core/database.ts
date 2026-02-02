@@ -2,7 +2,7 @@ import { DataSource, DataSourceOptions } from 'typeorm'
 import { join } from 'path'
 import { readdir } from 'fs/promises'
 import { createLogger } from '../logger.js'
-import { config } from '../config.js'
+import { configManager } from '../config.js'
 import { modulesPath, externalModulesPath } from '../utils/path.js'
 
 const logger = createLogger('core/database')
@@ -73,14 +73,14 @@ export const createDataSource = async () => {
 
   dataSource = new DataSource({
     type: 'postgres',
-    database: config.db?.database,
-    host: config.db?.host,
-    port: config.db?.port,
-    username: config.db?.username,
-    password: config.db?.password,
+    database: configManager.config.db?.database,
+    host: configManager.config.db?.host,
+    port: configManager.config.db?.port,
+    username: configManager.config.db?.username,
+    password: configManager.config.db?.password,
     entities,
     migrations,
-    synchronize: config.db?.synchronize,
+    synchronize: configManager.config.db?.synchronize,
     logging: process.env.LOG_LEVEL === 'DEBUG',
   })
 

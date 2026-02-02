@@ -9,14 +9,10 @@ import { Help, type HelpData } from './templates/Help.js'
 import { renderTemplate } from '../../core/playwright.js'
 import { PermissionManager, Role } from '../../core/permissionManager.js'
 import { CommandManager } from '../../core/commandManager.js'
-import { config } from '../../config.js'
-import fs from 'fs'
-import yaml from 'js-yaml'
-import { reloadConfig } from '../../config.js'
+import { configManager } from '../../config.js'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
 const permissionManager = new PermissionManager()
-const CONFIG_PATH = './config.yaml'
 const MANAGE_PERMISSION = 'utils.permission.manage'
 
 const parseNumber = (value?: string) => {
@@ -51,15 +47,6 @@ const resolveScope = (message: EnhancedMessage, scopeArg?: string) => {
   }
 
   return { type: 'global' as const }
-}
-
-const loadConfigFile = () => {
-  const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
-  return (yaml.load(raw) ?? {}) as Record<string, any>
-}
-
-const saveConfigFile = (data: Record<string, any>) => {
-  fs.writeFileSync(CONFIG_PATH, yaml.dump(data, { lineWidth: 120 }))
 }
 
 const ensureRbacConfig = (configData: Record<string, any>) => {
@@ -100,7 +87,7 @@ export default class ExampleModule extends BaseCommand {
       return
     }
 
-    const prefix = config.command?.globalPrefix || '.'
+    const prefix = configManager.config.command?.globalPrefix || '.'
     const normalizePrefix = (value: string) => {
       if (value.startsWith(prefix)) return value
       if (value.startsWith('.')) return `${prefix}${value.slice(1)}`
@@ -184,7 +171,6 @@ export default class ExampleModule extends BaseCommand {
 
   @Command('ping', '测试机器人是否在线')
   @Usage('.ping')
-  @Example('.ping')
   @Permission('utils.ping')
   async handlePing(
     @Message() message: EnhancedMessage,
@@ -203,7 +189,6 @@ export default class ExampleModule extends BaseCommand {
 
   @Command('last-ping', '查看最近一次 ping 的时间')
   @Usage('.last-ping')
-  @Example('.last-ping')
   @Permission('utils.last-ping')
   async handleLastPing(
     @Message() message: EnhancedMessage,
@@ -224,7 +209,6 @@ export default class ExampleModule extends BaseCommand {
 
   @Command('whoami', '查看当前用户信息')
   @Usage('.whoami')
-  @Example('.whoami')
   @Permission('utils.whoami')
   async handleWhoami(
     @Message() message: EnhancedMessage,
@@ -276,7 +260,7 @@ export default class ExampleModule extends BaseCommand {
     }
 
     const scope = resolveScope(message, args[2])
-    const configData = loadConfigFile()
+    const configData = configManager.readConfigRaw()
     const rbac = ensureRbacConfig(configData)
 
     if (scope.type === 'global') {
@@ -290,8 +274,8 @@ export default class ExampleModule extends BaseCommand {
       for (const permission of permissions) addUnique(target, permission)
     }
 
-    saveConfigFile(configData)
-    reloadConfig()
+    configManager.saveConfigRaw(configData)
+    configManager.reload()
 
     await message.reply([
       Structs.text('权限已更新')
@@ -315,13 +299,13 @@ export default class ExampleModule extends BaseCommand {
       return
     }
 
-    const configData = loadConfigFile()
+    const configData = configManager.readConfigRaw()
     const rbac = ensureRbacConfig(configData)
     const target = (rbac.rolePermissions[role] ??= [])
     for (const permission of permissions) addUnique(target, permission)
 
-    saveConfigFile(configData)
-    reloadConfig()
+    configManager.saveConfigRaw(configData)
+    configManager.reload()
 
     await message.reply([
       Structs.text('角色权限已更新')
@@ -345,13 +329,13 @@ export default class ExampleModule extends BaseCommand {
       return
     }
 
-    const configData = loadConfigFile()
+    const configData = configManager.readConfigRaw()
     const rbac = ensureRbacConfig(configData)
     rbac.rolePermissions[role] ??= []
     for (const permission of permissions) addUnique(rbac.rolePermissions[role], permission)
 
-    saveConfigFile(configData)
-    reloadConfig()
+    configManager.saveConfigRaw(configData)
+    configManager.reload()
 
     await message.reply([
       Structs.text('角色已创建')
@@ -377,7 +361,7 @@ export default class ExampleModule extends BaseCommand {
     }
 
     const scope = resolveScope(message, args[2])
-    const configData = loadConfigFile()
+    const configData = configManager.readConfigRaw()
     const rbac = ensureRbacConfig(configData)
     rbac.rolePermissions[role] ??= []
 
@@ -392,8 +376,8 @@ export default class ExampleModule extends BaseCommand {
       addUnique(target, userId)
     }
 
-    saveConfigFile(configData)
-    reloadConfig()
+    configManager.saveConfigRaw(configData)
+    configManager.reload()
 
     await message.reply([
       Structs.text('角色成员已更新')

@@ -58,42 +58,67 @@ const configSchema = z.object({
 });
 
 const CONFIG_PATH = './config.yaml'
-let watchStarted = false
 
-const loadConfigFromFile = () => {
-  if (!fs.existsSync(CONFIG_PATH)) {
-    logger.error('请先创建 config.yaml');
-    throw new Error('config.yaml not found');
+export class ConfigManager {
+  private watchStarted = false
+  private _config = this.loadConfigFromFile()
+  private _modulesConfig = (this._config.modules ?? {}) as Record<string, any>
+
+  get config() {
+    return this._config
   }
 
-  const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
-  const configParsed = yaml.load(configRaw)
-  return configSchema.parse(configParsed)
-}
+  get modulesConfig() {
+    return this._modulesConfig
+  }
 
-export let config = loadConfigFromFile()
-export let modulesConfig = (config.modules ?? {}) as Record<string, any>
+  private loadConfigFromFile() {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      logger.error('请先创建 config.yaml');
+      throw new Error('config.yaml not found');
+    }
 
-export const reloadConfig = () => {
-  try {
-    const nextConfig = loadConfigFromFile()
-    config = nextConfig
-    modulesConfig = (config.modules ?? {}) as Record<string, any>
-    logger.info('配置已重载')
-    return true
-  } catch (error) {
-    logger.error({ err: error }, '配置重载失败')
-    return false
+    const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    const configParsed = yaml.load(configRaw)
+    return configSchema.parse(configParsed)
+  }
+
+  readConfigRaw(): Record<string, any> {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      logger.error('请先创建 config.yaml');
+      throw new Error('config.yaml not found');
+    }
+    const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    return (yaml.load(configRaw) ?? {}) as Record<string, any>
+  }
+
+  saveConfigRaw(data: Record<string, any>) {
+    fs.writeFileSync(CONFIG_PATH, yaml.dump(data, { lineWidth: 120 }))
+  }
+
+  reload() {
+    try {
+      const nextConfig = this.loadConfigFromFile()
+      this._config = nextConfig
+      this._modulesConfig = (this._config.modules ?? {}) as Record<string, any>
+      logger.info('配置已重载')
+      return true
+    } catch (error) {
+      logger.error({ err: error }, '配置重载失败')
+      return false
+    }
+  }
+
+  startWatcher() {
+    if (this.watchStarted) return
+    this.watchStarted = true
+
+    fs.watchFile(CONFIG_PATH, { interval: 1000 }, (curr, prev) => {
+      if (curr.mtimeMs === prev.mtimeMs) return
+      logger.info('检测到配置变更，重载中')
+      this.reload()
+    })
   }
 }
 
-export const startConfigWatcher = () => {
-  if (watchStarted) return
-  watchStarted = true
-
-  fs.watchFile(CONFIG_PATH, { interval: 1000 }, (curr, prev) => {
-    if (curr.mtimeMs === prev.mtimeMs) return
-    logger.info('检测到配置变更，重载中')
-    reloadConfig()
-  })
-}
+export const configManager = new ConfigManager()
