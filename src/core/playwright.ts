@@ -3,6 +3,7 @@ import fs, { readdir } from 'fs/promises'
 import { chromium, type Browser, type Page } from 'playwright'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Frame } from './templates/Frame.js'
+import { config } from '../config.js'
 import { assetsDir, fontsPath } from '../utils/path.js'
 import { createLogger } from '../logger.js'
 
@@ -263,7 +264,14 @@ export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOp
       getTailwindCss(),
     ])
 
-  const markup = renderToStaticMarkup(Frame({ children: el }))
+  const markup = renderToStaticMarkup(Frame({
+    children: el,
+    meta: {
+      botName: (config as any)?.bot?.name,
+      generatedAt: new Date(),
+      devMode: typeof process !== 'undefined' && process.env?.NODE_ENV === 'development',
+    },
+  }))
   const devCssLink = tailwindDevServerUrl
     ? `<link rel="stylesheet" href="${tailwindDevServerUrl.replace(/\/$/, '')}/styles.css" />
     <link rel="stylesheet" href="${tailwindDevServerUrl.replace(/\/$/, '')}/fonts.css" />`

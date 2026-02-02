@@ -219,8 +219,8 @@ export const App = () => {
             >
               <div ref={previewRef}>
                 <Frame fit>
-                  <selectedTemplate.component {...(hasValid ? parsedData : {})} />
-                </Frame>
+              <selectedTemplate.component {...(hasValid ? parsedData : {})} />
+            </Frame>
               </div>
             </div>
           </div>

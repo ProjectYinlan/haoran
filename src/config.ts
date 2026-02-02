@@ -6,6 +6,9 @@ import { createLogger } from './logger.js';
 const logger = createLogger('config');
 
 const configSchema = z.object({
+  bot: z.object({
+    name: z.string().optional(),
+  }).optional(),
   ob: z.object({
     protocol: z.enum(['ws', 'wss']),
     host: z.string(),
