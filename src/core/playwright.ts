@@ -108,7 +108,9 @@ let warmupPromise: Promise<void> | null = null
 
 type RenderTemplateOptions = {
   width?: number
-  height?: number
+  height?: number | 'auto'
+  minHeight?: number
+  maxHeight?: number
   scale?: number
 }
 
@@ -247,7 +249,11 @@ export const warmupTemplateRenderer = async (): Promise<void> => {
 
 export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOptions): Promise<Buffer> => {
   const width = options?.width ?? 300
-  const height = options?.height ?? 100
+  const heightOption = options?.height ?? 100
+  const autoHeight = heightOption === 'auto'
+  const minHeight = options?.minHeight ?? 1
+  const maxHeight = options?.maxHeight
+  const height = autoHeight ? minHeight : heightOption
   const scale = options?.scale ?? 4
   const useDevCss = Boolean(tailwindDevServerUrl)
   const [fontCss, tailwindCss] = useDevCss
@@ -278,7 +284,7 @@ export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOp
     <style>
       html, body, #root {
         width: ${width}px;
-        height: ${height}px;
+        ${autoHeight ? `height: auto; min-height: ${minHeight}px;` : `height: ${height}px;`}
         margin: 0;
         padding: 0;
       }
@@ -313,9 +319,27 @@ export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOp
   await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => null)
   await page.evaluate(() => document.fonts.ready)
 
+  let finalHeight = height
+  if (autoHeight) {
+    const measuredHeight = await page.evaluate(({ minHeight, maxHeight }) => {
+      const root = document.getElementById('root')
+      const candidates = [
+        root?.getBoundingClientRect().height ?? 0,
+        root?.scrollHeight ?? 0,
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+      ]
+      const raw = Math.ceil(Math.max(...candidates))
+      const limited = Math.max(minHeight, maxHeight ? Math.min(raw, maxHeight) : raw)
+      return limited
+    }, { minHeight, maxHeight })
+    finalHeight = measuredHeight
+    await page.setViewportSize({ width, height: finalHeight })
+  }
+
   const png = await page.screenshot({
     type: 'png',
-    clip: { x: 0, y: 0, width, height },
+    clip: { x: 0, y: 0, width, height: finalHeight },
   })
 
   if (!useDebugPage) {

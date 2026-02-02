@@ -1,12 +1,23 @@
 import React from 'react'
+import classNames from 'classnames'
 
 type TagProps = {
   children: React.ReactNode
   color?: 'primary' | 'secondary' | 'tertiary' | 'success' | 'danger' | 'warning' | 'info' | 'light' | 'dark'
   theme?: 'solid-dark' | 'solid-light' | 'outline-dark' | 'outline-light'
+  asChild?: boolean
+  className?: string
+  fragmentClassName?: string
 }
 
-export const Tag = ({ children, color = 'primary', theme = 'solid-light' }: TagProps) => {
+export const Tag = ({
+  children,
+  color = 'primary',
+  theme = 'solid-light',
+  asChild = false,
+  className: propsClassName,
+  fragmentClassName
+}: TagProps) => {
   const classMap: Record<
     NonNullable<TagProps['color']>,
     { text: string, bgSolid: string, bgLight: string, border: string, borderLight: string }
@@ -99,20 +110,22 @@ export const Tag = ({ children, color = 'primary', theme = 'solid-light' }: TagP
     borderClass = isDark ? baseClass.border : baseClass.borderLight
   }
 
-  const className = [
+  const className = classNames([
     'inline-flex items-center justify-center whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium leading-none font-mono border',
     backgroundClass,
     textClass,
     borderClass,
-  ].join(' ')
+    propsClassName,
+  ])
 
   return (
-    <div className="flex items-center">
-      <span
-        className={className}
-      >
-        {children}
-      </span>
+    <div className={classNames('flex items-center', fragmentClassName)}>
+      {asChild && React.isValidElement(children)
+        ? React.cloneElement(children, {
+            className: classNames(children.props.className, className)
+          })
+        : <span className={className}>{children}</span>
+      }
     </div>
   )
 }

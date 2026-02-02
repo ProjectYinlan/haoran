@@ -5,6 +5,7 @@ import UtilRecord from './entities/UtilRecord.js'
 import { getDataSource } from '../../core/database.js'
 import dayjs from 'dayjs'
 import { UserProfile } from './templates/UserProfile.js'
+import { Help, type HelpData } from './templates/Help.js'
 import { renderTemplate } from '../../core/playwright.js'
 import { PermissionManager, Role } from '../../core/permissionManager.js'
 import { CommandManager } from '../../core/commandManager.js'
@@ -109,55 +110,69 @@ export default class ExampleModule extends BaseCommand {
 
     if (!target) {
       const modules = commandManager.getModules().sort()
+      const data: HelpData = {
+        title: '指令帮助',
+        scope: 'modules',
+        modules,
+        footer: `用法: ${prefix}help <module|command>`,
+      }
       await message.reply([
-        Structs.text([
-          '可用模块:',
-          modules.map((name) => `- ${name}`).join('\n'),
-          `用法: ${prefix}help <module|command>`
-        ].filter(Boolean).join('\n'))
+        Structs.image(await renderTemplate(Help(data), {
+          width: 420,
+          height: 'auto',
+          minHeight: 160,
+        }))
       ])
       return
     }
 
     const moduleCommands = commandManager.getCommandsByModule(target)
     if (moduleCommands.length > 0) {
-      const lines = [
-        `模块: ${target}`,
-        ...moduleCommands
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .flatMap((command) => {
-            const usage = command.usage ? normalizePrefix(command.usage) : '未提供'
-            const examples = command.examples && command.examples.length > 0
-              ? command.examples.map((example) => normalizePrefix(example)).join(' | ')
-              : '未提供'
-            return [
-              `- ${command.name}: ${command.description || '无描述'}`,
-              `  用法: ${usage}`,
-              `  示例: ${examples}`
-            ]
-          })
-      ]
-
+      const commands = moduleCommands
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((command) => ({
+          name: command.name,
+          description: command.description || '无描述',
+          usage: command.usage ? normalizePrefix(command.usage) : '未提供',
+          examples: command.examples && command.examples.length > 0
+            ? command.examples.map((example) => normalizePrefix(example))
+            : ['未提供'],
+        }))
+      const data: HelpData = {
+        title: '指令帮助',
+        scope: 'module',
+        moduleName: target,
+        commands,
+      }
       await message.reply([
-        Structs.text(lines.join('\n'))
+        Structs.image(await renderTemplate(Help(data), {
+          width: 420,
+          height: 'auto',
+          minHeight: 200,
+        }))
       ])
       return
     }
 
     const command = commandManager.getCommandByName(target)
     if (command) {
-      const usage = command.usage ? normalizePrefix(command.usage) : '未提供'
-      const examples = command.examples && command.examples.length > 0
-        ? command.examples.map((example) => normalizePrefix(example)).join(' | ')
-        : '未提供'
+      const data: HelpData = {
+        title: '指令帮助',
+        scope: 'command',
+        moduleName: command.moduleName,
+        commandName: command.name,
+        description: command.description || '无描述',
+        usage: command.usage ? normalizePrefix(command.usage) : '未提供',
+        examples: command.examples && command.examples.length > 0
+          ? command.examples.map((example) => normalizePrefix(example))
+          : ['未提供'],
+      }
       await message.reply([
-        Structs.text([
-          `指令: ${command.name}`,
-          `模块: ${command.moduleName}`,
-          `描述: ${command.description || '无描述'}`,
-          `用法: ${usage}`,
-          `示例: ${examples}`
-        ].join('\n'))
+        Structs.image(await renderTemplate(Help(data), {
+          width: 420,
+          height: 'auto',
+          minHeight: 180,
+        }))
       ])
       return
     }

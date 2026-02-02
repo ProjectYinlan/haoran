@@ -6,6 +6,12 @@ export type TemplatePreview = {
   title: string
   component: ComponentType<Record<string, unknown>>
   defaultData?: unknown
+  size?: {
+    width?: number
+    height?: number | 'auto'
+    minHeight?: number
+    maxHeight?: number
+  }
 }
 
 type PreviewExport = {
@@ -13,6 +19,12 @@ type PreviewExport = {
     title?: string
     component?: ComponentType<Record<string, unknown>>
     defaultData?: unknown
+    size?: {
+      width?: number
+      height?: number | 'auto'
+      minHeight?: number
+      maxHeight?: number
+    }
   }
   default?: ComponentType<Record<string, unknown>>
   [key: string]: unknown
@@ -57,6 +69,7 @@ export const templates: TemplatePreview[] = templateEntries.reduce<TemplatePrevi
     title: preview?.title ?? getTitleFromPath(filePath),
     component,
     defaultData: preview?.defaultData,
+    size: preview?.size,
   })
 
   return acc
