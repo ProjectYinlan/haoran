@@ -1,6 +1,8 @@
 import { BaseScope, BaseScopeType } from "../typings/Command.js"
 import { EnhancedMessage } from "../typings/Message.js"
 
+export { getQQAvatarUrl } from "./avatar.js"
+
 const parseNumber = (value?: string) => {
   if (!value) return undefined
   const parsed = Number(value)
