@@ -98,7 +98,7 @@ export const Help = ({
               {commands.map((command) => (
                 <div
                   key={command.name}
-                  className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2"
+                  className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 pt-1"
                 >
                   <div className="grid grid-cols-2 items-center gap-2 justify-between">
                     <span className="text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words">{command.name}</span>
