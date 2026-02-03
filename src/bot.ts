@@ -2,6 +2,7 @@ import { NCWebsocket } from 'node-napcat-ts'
 import { configManager } from './config.js'
 import { CommandManager } from './core/commandManager.js'
 import { ModuleLoader } from './core/moduleLoader.js'
+import { Scheduler } from './core/scheduler.js'
 import { Message, EnhancedMessage } from './typings/Message.js'
 import { createLogger } from './logger.js'
 
@@ -64,6 +65,9 @@ export async function connect() {
 
     await bot.connect()
     logger.info("Onebot 连接成功")
+
+    // 设置 Scheduler 的 bot 实例
+    Scheduler.getInstance().setBot(bot)
 
     logger.info(`登录账号=${(await bot.get_login_info()).user_id}, 好友数=${(await bot.get_friend_list()).length}, 群聊数=${(await bot.get_group_list()).length}`)
   } catch (error) {

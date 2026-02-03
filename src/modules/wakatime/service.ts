@@ -1,6 +1,8 @@
 import WakatimeBinding from './entities/WakatimeBinding.js'
+import WakatimeGroupRank from './entities/WakatimeGroupRank.js'
 import { getDataSource } from '../../core/database.js'
 import { createLogger } from '../../logger.js'
+import { In } from 'typeorm'
 
 const logger = createLogger('modules/wakatime')
 
@@ -35,6 +37,54 @@ export class WakatimeService {
 
   private getRepository() {
     return getDataSource().getRepository(WakatimeBinding)
+  }
+
+  private getGroupRankRepository() {
+    return getDataSource().getRepository(WakatimeGroupRank)
+  }
+
+  // 群排行相关方法
+  async getGroupRankConfig(groupId: number): Promise<WakatimeGroupRank | null> {
+    return await this.getGroupRankRepository().findOne({ where: { groupId } })
+  }
+
+  async setGroupRankEnabled(groupId: number, enabled: boolean): Promise<WakatimeGroupRank> {
+    const repo = this.getGroupRankRepository()
+    let config = await repo.findOne({ where: { groupId } })
+    if (!config) {
+      config = repo.create({ groupId, enabled })
+    } else {
+      config.enabled = enabled
+    }
+    return await repo.save(config)
+  }
+
+  async getAllEnabledGroupRanks(): Promise<WakatimeGroupRank[]> {
+    return await this.getGroupRankRepository().find({ where: { enabled: true } })
+  }
+
+  async getBindingsByUserIds(userIds: number[]): Promise<WakatimeBinding[]> {
+    if (userIds.length === 0) return []
+    return await this.getRepository().find({ where: { userId: In(userIds) } })
+  }
+
+  async fetchTodayForUsers(bindings: WakatimeBinding[]): Promise<{ userId: number; username: string; totalSeconds: number }[]> {
+    const results: { userId: number; username: string; totalSeconds: number }[] = []
+    
+    for (const binding of bindings) {
+      try {
+        const stats = await this.fetchToday(binding.apiKey)
+        results.push({
+          userId: binding.userId,
+          username: binding.username ?? 'User',
+          totalSeconds: stats.grandTotal.totalSeconds
+        })
+      } catch (error) {
+        logger.warn(`获取用户 ${binding.userId} 今日统计失败: ${error}`)
+      }
+    }
+    
+    return results.sort((a, b) => b.totalSeconds - a.totalSeconds)
   }
 
   async bindToken(userId: number, apiKey: string): Promise<WakatimeBinding> {

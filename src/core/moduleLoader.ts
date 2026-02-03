@@ -1,5 +1,6 @@
 import { BaseCommand } from './decorators.js'
 import { CommandManager } from './commandManager.js'
+import { Scheduler, getCronMetadata } from './scheduler.js'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { readdir } from 'fs/promises'
@@ -21,6 +22,16 @@ export class ModuleLoader {
     this.externalModulesPath = join(baseDir, '../external-modules')
   }
 
+  private registerCronTasks(module: BaseCommand) {
+    const scheduler = Scheduler.getInstance()
+    const cronMetadata = getCronMetadata(module.constructor)
+    for (const { cron, id, handler } of cronMetadata) {
+      const boundHandler = handler.bind(module)
+      const taskId = `${module.moduleName}.${id}`
+      scheduler.register(taskId, cron, boundHandler)
+    }
+  }
+
   static getInstance(commandManager: CommandManager): ModuleLoader {
     if (!ModuleLoader.instance) {
       ModuleLoader.instance = new ModuleLoader(commandManager)
@@ -35,6 +46,7 @@ export class ModuleLoader {
       for (const module of internalModules) {
         logger.info('加载内部模块: ' + module.moduleName || 'unknown')
         this.commandManager.registerModule(module)
+        this.registerCronTasks(module)
       }
 
       // 加载外部模块
@@ -42,6 +54,7 @@ export class ModuleLoader {
       for (const module of externalModules) {
         logger.info('加载外部模块: ' + module.moduleName || 'unknown')
         this.commandManager.registerModule(module)
+        this.registerCronTasks(module)
       }
     } catch (error) {
       logger.error('加载模块时出错: ')
