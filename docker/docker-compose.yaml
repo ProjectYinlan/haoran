@@ -7,4 +7,3 @@ services:
       CONFIG_FILE_PATH: /etc/bot/config.yaml
     volumes:
       - /path/to/config:/etc/bot
-      - /path/to/ms-playwright:/ms-playwright

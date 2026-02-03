@@ -11,6 +11,7 @@ dist
 .idea
 
 config.yaml
+config.*.yaml
 
 # src/external-modules/*
 # !src/external-modules/example
