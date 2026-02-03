@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { modulesConfig } from '../../config.js'
+import { configManager } from '../../config.js'
 
 export const questionSchema = z.object({
   enabled: z.boolean().optional(),
@@ -10,4 +10,4 @@ export const questionSchema = z.object({
   }).optional(),
 }).optional()
 
-export const questionConfig = questionSchema.parse(modulesConfig.question)
+export const questionConfig = questionSchema.parse(configManager.modulesConfig.question)

@@ -1,6 +1,6 @@
 # 项目结构与使用说明
 
-本文档说明项目的目录结构、模块开发方式，以及消息回复 `Structs` 的使用方法。
+本文档说明项目的目录结构、模块开发方式，以及消息回复 `Structs` 的使用方法，并提供相关文档索引指引。
 
 ## 目录结构概览
 
@@ -10,6 +10,8 @@
   config.yaml.example       # 配置示例
   docs/
     structs.md              # 本文档
+    permission.md           # 权限系统（RBAC）
+    template.md             # 模板渲染与预览
   src/
     index.ts                # 入口：初始化数据库并启动机器人
     bot.ts                  # 连接 Onebot，监听消息并派发命令
@@ -20,6 +22,8 @@
       commandManager.ts     # 命令注册/执行
       moduleLoader.ts       # 模块加载（内置 + 外部）
       database.ts           # 数据库初始化
+      permissionManager.ts  # 权限系统（RBAC）
+      playwright.ts         # 模板渲染（图片）
     modules/                # 内置模块
       utils/                # 示例：ping/last-ping
       question/             # 示例：LLM 问答
@@ -43,7 +47,7 @@
 ### 基本模板
 
 ```ts
-import { BaseCommand, Command, Module, Permission, Message, Args } from '../../core/decorators.js'
+import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example } from '../../core/decorators.js'
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 
@@ -52,6 +56,8 @@ export default class DemoModule extends BaseCommand {
   initialize() {}
 
   @Command('hello', '打招呼')
+  @Usage('.hello <昵称>')
+  @Example('.hello haoran')
   @Permission('demo.hello')
   async handleHello(
     @Message() message: EnhancedMessage,
@@ -67,13 +73,25 @@ export default class DemoModule extends BaseCommand {
 说明：
 - `@Module('name')` 定义模块名。
 - `@Command('命令', '描述')` 定义命令名称（触发方式为 `.命令`）。
-- `@Permission('permission.code')` 预留权限字段（目前未启用权限检查）。
+- `@Usage('用法')` 描述指令用法（用于 help 展示）。
+- `@Example('示例')` 描述指令示例（可重复多次，用于 help 展示），当命令用法并没有参数时，不推荐编写示例。
+- `@Permission('permission.code')` 为命令添加权限标识，RBAC 会在执行前校验。
 - 参数装饰器来自 `decorators.ts`：
   - `@Message()` 完整消息
   - `@Args()` 参数数组（空格分隔）
   - `@Content()` 原始文本内容
   - `@Sender()` 发送者
   - `@GroupId()` 群号
+
+全局命令前缀在 `config.yaml` 中可以进行配置，默认为 `.`。
+
+## help 指令
+
+内置在 `utils` 模块，使用方式：
+
+- `.help` 列出可用模块
+- `.help <module>` 列出该模块下所有命令的描述、用法、示例
+- `.help <command>` 显示该命令的描述、用法、示例与所属模块
 
 ## Structs 消息构造与回复
 
@@ -88,6 +106,22 @@ await message.reply([
 ```
 
 `reply` 的参数是 `SendMessageSegment[]`，可组合多个结构体。
+
+## 模板渲染（图片）
+
+模板图片渲染由 `src/core/playwright.ts` 提供，业务模块直接传入组件：
+
+```ts
+await message.reply([
+  Structs.image(await renderTemplate(YourTemplate({
+    // 组件 props
+  })))
+])
+```
+
+渲染过程不会通过 URL 路由或 query 传参，数据通过 props 直接传入组件。
+
+更完整的模板渲染/预览说明见 `docs/template.md`（包含预览入口、模板扫描目录、组件约定与环境变量）。
 
 ## 配置与模块配置
 
@@ -106,6 +140,12 @@ modules:
 ```
 
 模块配置的校验与读取可参考 `src/modules/question/schema.ts`。
+
+## 权限系统（RBAC）
+
+权限管理由 `src/core/permissionManager.ts` 提供，命令可通过 `@Permission('xxx.yyy')` 标注权限标识，执行前会进行 RBAC 校验。
+
+完整规则与配置示例见 `docs/permission.md`（角色定义、匹配规则、默认权限与配置字段）。
 
 ## 开发与运行
 

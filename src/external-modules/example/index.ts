@@ -1,4 +1,4 @@
-import { BaseCommand, Command, Module, Args, Permission, Message } from '../../core/decorators.js'
+import { BaseCommand, Command, Module, Args, Permission, Message, Usage } from '../../core/decorators.js'
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 
@@ -8,6 +8,7 @@ export default class ExternalExampleModule extends BaseCommand {
   }
 
   @Command('hello', '打招呼')
+  @Usage('hello')
   @Permission('external-example.hello')
   async handleHello(
     @Message() message: EnhancedMessage,

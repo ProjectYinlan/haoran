@@ -1,5 +1,5 @@
 import { NCWebsocket } from 'node-napcat-ts'
-import { config } from './config.js'
+import { configManager } from './config.js'
 import { CommandManager } from './core/commandManager.js'
 import { ModuleLoader } from './core/moduleLoader.js'
 import { Message, EnhancedMessage } from './typings/Message.js'
@@ -9,14 +9,14 @@ const logger = createLogger('bot')
 
 export async function connect() {
   try {
-    const bot = new NCWebsocket(config.ob, false)
+    const bot = new NCWebsocket(configManager.config.ob, false)
     const commandManager = new CommandManager()
     const moduleLoader = ModuleLoader.getInstance(commandManager)
-
     // 加载所有模块
     moduleLoader.loadModules()
 
     bot.on('message', async (message: Message) => {
+      const globalPrefix = configManager.config.command?.globalPrefix || '.'
       const msg = message.message.reduce((text, content) => {
         if (content.type === 'text') {
           return text + content.data.text
@@ -24,13 +24,13 @@ export async function connect() {
         return text
       }, "")
 
-      if (!msg.startsWith('.')) return
+      if (!msg.startsWith(globalPrefix || '.')) return
 
       // 二次封装 message，添加 reply 方法用于快速回复
       const enhancedMessage: EnhancedMessage = {
         ...message,
         reply: async (replyMessage) => {
-          await bot.send_msg({
+          return await bot.send_msg({
             user_id: message.sender.user_id,
             group_id: message.message_type === 'group' ? message.group_id : undefined,
             message: replyMessage
@@ -49,7 +49,10 @@ export async function connect() {
         }
       };
 
-      const [command, ...args] = msg.slice(1).split(' ')
+      const [command, ...args] = msg
+        .slice(globalPrefix.length)
+        .trim()
+        .split(' ')
 
       await commandManager.handleCommand(bot, enhancedMessage, command, args)
     })
@@ -59,7 +62,7 @@ export async function connect() {
 
     logger.info(`登录账号=${(await bot.get_login_info()).user_id}, 好友数=${(await bot.get_friend_list()).length}, 群聊数=${(await bot.get_group_list()).length}`)
   } catch (error) {
-    logger.error("Onebot 连接失败: ", error)
+    logger.error({ err: error }, "Onebot 连接失败")
     process.exit(1)
   }
 }
