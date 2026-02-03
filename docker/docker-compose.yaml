@@ -1,7 +1,7 @@
 services:
-  haoran-bot:
-    image: haoran-bot:latest
-    container_name: haoran-bot
+  haoran:
+    image: haoran:latest
+    container_name: haoran
     restart: unless-stopped
     environment:
       CONFIG_FILE_PATH: /etc/bot/config.yaml

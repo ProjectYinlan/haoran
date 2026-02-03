@@ -8,11 +8,11 @@
 ## 运行命令（Docker）
 
 ```bash
-docker run -d --name haoran-bot \
+docker run -d --name haoran \
   -v /path/to/config:/etc/bot \
   -v /path/to/ms-playwright:/ms-playwright \
   -e CONFIG_FILE_PATH=/etc/bot/config.yaml \
-  haoran-bot:latest
+  haoran:latest
 ```
 
 说明：
