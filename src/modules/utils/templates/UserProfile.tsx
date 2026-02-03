@@ -49,4 +49,8 @@ export const preview = {
     permissionTag: 'OWNER',
     permissionTagColor: 'primary',
   } satisfies UserProfileData,
+  size: {
+    width: 250,
+    height: 100,
+  },
 }
