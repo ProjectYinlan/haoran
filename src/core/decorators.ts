@@ -1,6 +1,16 @@
 import { NCWebsocket } from 'node-napcat-ts'
 import { EnhancedMessage } from '../typings/Message.js'
 
+// 导出上下文装饰器
+export { 
+  ContextParam, 
+  ContextCollect, 
+  ContextConfirm,
+  type ContextParamConfig,
+  type ContextCollectConfig,
+  type ContextConfirmConfig
+} from './contextManager.js'
+
 // 命令处理器类型
 type CommandHandler = (ws: NCWebsocket, message: EnhancedMessage, args: string[]) => Promise<void> | void
 
@@ -8,6 +18,7 @@ type CommandHandler = (ws: NCWebsocket, message: EnhancedMessage, args: string[]
 const PARAM_METADATA_KEY = Symbol('param_metadata')
 const USAGE_METADATA_KEY = Symbol('usage_metadata')
 const EXAMPLE_METADATA_KEY = Symbol('example_metadata')
+const COLLECTED_PARAM_INDEX_KEY = Symbol('collected_param_index')
 
 // 参数类型
 export enum ParamType {
@@ -16,7 +27,8 @@ export enum ParamType {
   ARGS = 'args',
   CONTENT = 'content',
   SENDER = 'sender',
-  GROUP_ID = 'group_id'
+  GROUP_ID = 'group_id',
+  COLLECTED = 'collected'
 }
 
 // 参数装饰器
@@ -37,6 +49,7 @@ export const Args = () => Param(ParamType.ARGS)
 export const Content = () => Param(ParamType.CONTENT)
 export const Sender = () => Param(ParamType.SENDER)
 export const GroupId = () => Param(ParamType.GROUP_ID)
+export const Collected = () => Param(ParamType.COLLECTED)
 
 // 命令装饰器
 export function Command(name: string, description: string = '') {
@@ -53,7 +66,7 @@ export function Command(name: string, description: string = '') {
 
     // 包装原始方法
     const originalMethod = descriptor.value
-    descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[]) {
+    descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[], collected?: string[]) {
       const paramValues = new Array(paramMetadata.length)
 
       // 根据参数类型填充值
@@ -81,6 +94,9 @@ export function Command(name: string, description: string = '') {
             break
           case ParamType.GROUP_ID:
             paramValues[index] = message.message_type === 'group' ? message.user_id : undefined
+            break
+          case ParamType.COLLECTED:
+            paramValues[index] = collected ?? []
             break
         }
       }
@@ -112,7 +128,7 @@ export function SubCommand(path: string | string[], description: string = '') {
     const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
 
     const originalMethod = descriptor.value
-    descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[]) {
+    descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[], collected?: string[]) {
       const paramValues = new Array(paramMetadata.length)
 
       for (const { index, type } of paramMetadata) {
@@ -139,6 +155,9 @@ export function SubCommand(path: string | string[], description: string = '') {
             break
           case ParamType.GROUP_ID:
             paramValues[index] = message.message_type === 'group' ? message.user_id : undefined
+            break
+          case ParamType.COLLECTED:
+            paramValues[index] = collected ?? []
             break
         }
       }

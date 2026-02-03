@@ -3,6 +3,7 @@ import { configManager } from './config.js'
 import { CommandManager } from './core/commandManager.js'
 import { ModuleLoader } from './core/moduleLoader.js'
 import { Scheduler } from './core/scheduler.js'
+import { ContextManager } from './core/contextManager.js'
 import { Message, EnhancedMessage } from './typings/Message.js'
 import { createLogger } from './logger.js'
 
@@ -22,17 +23,7 @@ export async function connect() {
         return
       }
 
-      const globalPrefix = configManager.config.command?.globalPrefix || '.'
-      const msg = message.message.reduce((text, content) => {
-        if (content.type === 'text') {
-          return text + content.data.text
-        }
-        return text
-      }, "")
-
-      if (!msg.startsWith(globalPrefix || '.')) return
-
-      // 二次封装 message，添加 reply 方法用于快速回复
+      // 二次封装 message
       const enhancedMessage: EnhancedMessage = {
         ...message,
         reply: async (replyMessage) => {
@@ -44,16 +35,29 @@ export async function connect() {
         },
         getQuoteMessage: async () => {
           const quoteMessage = message.message.find(m => m.type === 'reply')
-
           if (!quoteMessage) return
-
           const rawQuoteMessage = await bot.get_msg({
             message_id: Number(quoteMessage.data.id)
           })
-
           return rawQuoteMessage
         }
       };
+
+      // 优先检查上下文回复
+      const contextManager = ContextManager.getInstance()
+      const isContextReply = await contextManager.handleMessage(bot, enhancedMessage)
+      if (isContextReply) return
+
+      // 检查命令前缀
+      const globalPrefix = configManager.config.command?.globalPrefix || '.'
+      const msg = message.message.reduce((text, content) => {
+        if (content.type === 'text') {
+          return text + content.data.text
+        }
+        return text
+      }, "")
+
+      if (!msg.startsWith(globalPrefix || '.')) return
 
       const [command, ...args] = msg
         .slice(globalPrefix.length)

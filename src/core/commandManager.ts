@@ -3,6 +3,12 @@ import { BaseCommand, getPrivateOnlyHint, getGroupOnlyHint } from './decorators.
 import { EnhancedMessage } from '../typings/Message.js'
 import { createLogger } from '../logger.js'
 import { PermissionManager } from './permissionManager.js'
+import { 
+  ContextManager, 
+  getContextParamConfigs, 
+  getContextCollectConfig,
+  getContextConfirmConfig
+} from './contextManager.js'
 
 const logger = createLogger('core/command-manager')
 
@@ -20,6 +26,9 @@ type CommandInfo = {
   propertyKey: string
   moduleInstance: BaseCommand
 }
+
+// 存储收集中的消息
+const collectingSessions: Map<string, string[]> = new Map()
 
 export class CommandManager {
   private static instance?: CommandManager
@@ -97,6 +106,10 @@ export class CommandManager {
     return null
   }
 
+  private getSessionKey(userId: number, groupId?: number): string {
+    return groupId ? `${groupId}:${userId}` : `private:${userId}`
+  }
+
   async handleCommand(bot: NCWebsocket, message: EnhancedMessage, command: string, args: string[]) {
     const resolved = this.resolveCommand(command, args)
     const cmd = resolved?.cmd
@@ -132,9 +145,133 @@ export class CommandManager {
       }
 
       logger.debug(`执行命令: ${command}${args.length ? `参数: ${args.join(' ')}` : ''}`)
+      
+      const remainingArgs = resolved?.remainingArgs ?? args
+
+      // 处理 @ContextParam 装饰器
+      const contextParamConfigs = getContextParamConfigs(cmd.moduleInstance, cmd.propertyKey)
+      for (const config of contextParamConfigs) {
+        const argIndex = config.argIndex ?? 0
+        if (!remainingArgs[argIndex]) {
+          // 参数缺失，进入上下文等待
+          const contextManager = ContextManager.getInstance()
+          await contextManager.waitForInput(
+            message,
+            async (bot, replyMessage, content) => {
+              // 验证输入
+              if (config.validator) {
+                const result = config.validator(content)
+                if (result !== true) {
+                  const errorMsg = typeof result === 'string' ? result : '输入无效'
+                  await replyMessage.reply([Structs.text(`❌ ${errorMsg}`)])
+                  return
+                }
+              }
+              // 填充参数并重新执行
+              const newArgs = [...remainingArgs]
+              newArgs[argIndex] = content
+              await cmd.handler(bot, replyMessage, newArgs)
+            },
+            { prompt: config.prompt, timeout: config.timeout }
+          )
+          return
+        }
+      }
+
+      // 处理 @ContextCollect 装饰器
+      const collectConfig = getContextCollectConfig(cmd.moduleInstance, cmd.propertyKey)
+      if (collectConfig) {
+        const userId = message.sender.user_id
+        const groupId = message.message_type === 'group' ? message.group_id : undefined
+        const sessionKey = this.getSessionKey(userId, groupId)
+        
+        // 初始化收集会话
+        collectingSessions.set(sessionKey, [])
+        
+        const contextManager = ContextManager.getInstance()
+        
+        const collectNext = async (msg: EnhancedMessage, isFirst: boolean) => {
+          await contextManager.waitForInput(
+            msg,
+            async (bot, replyMessage, content) => {
+              const messages = collectingSessions.get(sessionKey) || []
+              
+              // 检查是否结束
+              if (content === collectConfig.stopWord) {
+                collectingSessions.delete(sessionKey)
+                
+                // 检查最小数量
+                if (collectConfig.minCount && messages.length < collectConfig.minCount) {
+                  await replyMessage.reply([Structs.text(`❌ 至少需要 ${collectConfig.minCount} 条消息`)])
+                  return
+                }
+                
+                // 执行命令，注入收集到的消息
+                await cmd.handler(bot, replyMessage, remainingArgs, messages)
+                return
+              }
+              
+              if (!content) {
+                await replyMessage.reply([Structs.text(`❌ 内容不能为空，发送 ${collectConfig.stopWord} 结束`)])
+                await collectNext(replyMessage, false)
+                return
+              }
+              
+              // 添加消息
+              messages.push(content)
+              collectingSessions.set(sessionKey, messages)
+              
+              // 检查最大数量
+              if (collectConfig.maxCount && messages.length >= collectConfig.maxCount) {
+                collectingSessions.delete(sessionKey)
+                await replyMessage.reply([Structs.text(`✅ 已达到最大数量 ${collectConfig.maxCount}，自动结束`)])
+                await cmd.handler(bot, replyMessage, remainingArgs, messages)
+                return
+              }
+              
+              // 继续收集
+              if (collectConfig.continuePrompt) {
+                await replyMessage.reply([Structs.text(collectConfig.continuePrompt.replace('{count}', String(messages.length)))])
+              }
+              await collectNext(replyMessage, false)
+            },
+            { 
+              prompt: isFirst ? collectConfig.prompt : undefined, 
+              timeout: collectConfig.timeout ?? 300000 
+            }
+          )
+        }
+        
+        await collectNext(message, true)
+        return
+      }
+
+      // 处理 @ContextConfirm 装饰器
+      const confirmConfig = getContextConfirmConfig(cmd.moduleInstance, cmd.propertyKey)
+      if (confirmConfig) {
+        const contextManager = ContextManager.getInstance()
+        const confirmWords = confirmConfig.confirmWords ?? ['Y', 'y', '是', '确认']
+        const cancelWords = confirmConfig.cancelWords ?? ['N', 'n', '否', '取消']
+        
+        await contextManager.waitForInput(
+          message,
+          async (bot, replyMessage, content) => {
+            if (confirmWords.includes(content)) {
+              await cmd.handler(bot, replyMessage, remainingArgs)
+            } else if (cancelWords.includes(content)) {
+              const hint = confirmConfig.cancelHint ?? '已取消操作'
+              await replyMessage.reply([Structs.text(hint)])
+            } else {
+              await replyMessage.reply([Structs.text(`❌ 请回复 ${confirmWords[0]} 确认或 ${cancelWords[0]} 取消`)])
+            }
+          },
+          { prompt: confirmConfig.prompt, timeout: confirmConfig.timeout ?? 30000 }
+        )
+        return
+      }
+
       try {
         const startAt = Date.now()
-        const remainingArgs = resolved?.remainingArgs ?? args
         await cmd.handler(bot, message, remainingArgs)
         logger.debug(`命令耗时: ${command} ${Date.now() - startAt}ms`)
       } catch (error) {
