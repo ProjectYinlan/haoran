@@ -99,6 +99,72 @@ export function Command(name: string, description: string = '') {
   }
 }
 
+// 子命令装饰器
+export function SubCommand(path: string | string[], description: string = '') {
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    if (!target.constructor.commands) {
+      target.constructor.commands = new Map()
+    }
+
+    const paramMetadata: { index: number, type: ParamType }[] =
+      Reflect.getMetadata(PARAM_METADATA_KEY, target, propertyKey) || []
+    const usage: string | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
+    const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
+
+    const originalMethod = descriptor.value
+    descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[]) {
+      const paramValues = new Array(paramMetadata.length)
+
+      for (const { index, type } of paramMetadata) {
+        switch (type) {
+          case ParamType.MESSAGE:
+            paramValues[index] = message
+            break
+          case ParamType.BOT:
+            paramValues[index] = bot
+            break
+          case ParamType.ARGS:
+            paramValues[index] = args
+            break
+          case ParamType.CONTENT:
+            paramValues[index] = message.message.reduce((text, content) => {
+              if (content.type === 'text') {
+                return text + content.data.text
+              }
+              return text
+            }, "")
+            break
+          case ParamType.SENDER:
+            paramValues[index] = message.sender
+            break
+          case ParamType.GROUP_ID:
+            paramValues[index] = message.message_type === 'group' ? message.user_id : undefined
+            break
+        }
+      }
+
+      return originalMethod.apply(this, paramValues)
+    }
+
+    const segments = Array.isArray(path)
+      ? path
+      : path.split(' ')
+    const subCommandPath = segments.map((item) => item.trim()).filter(Boolean)
+    const subCommandName = subCommandPath.join(' ')
+
+    target.constructor.commands.set(subCommandName, {
+      handler: descriptor.value,
+      description,
+      name: subCommandName,
+      propertyKey,
+      usage,
+      examples,
+      isSubCommand: true,
+      subCommandPath,
+    })
+  }
+}
+
 // 权限装饰器
 export function Permission(permission: string) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
@@ -134,7 +200,16 @@ export function Module(name: string) {
 
 // 基础命令类
 export abstract class BaseCommand {
-  static commands: Map<string, { handler: CommandHandler, description: string, name: string, propertyKey: string, usage?: string, examples?: string[] }>
+  static commands: Map<string, {
+    handler: CommandHandler
+    description: string
+    name: string
+    propertyKey: string
+    usage?: string
+    examples?: string[]
+    isSubCommand?: boolean
+    subCommandPath?: string[]
+  }>
   static permissions: Map<string, string>
   static moduleName: string
 

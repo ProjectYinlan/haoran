@@ -51,6 +51,6 @@ export const preview = {
   } satisfies UserProfileData,
   size: {
     width: 250,
-    height: 100,
+    height: 125,
   },
 }

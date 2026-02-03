@@ -6,6 +6,9 @@ export type HelpCommandItem = {
   description?: string
   usage?: string
   examples?: string[]
+  isSubCommand?: boolean
+  parentCommand?: string
+  subCommandPath?: string[]
 }
 
 export type HelpData = {
@@ -19,6 +22,9 @@ export type HelpData = {
   usage?: string
   examples?: string[]
   footer?: string
+  isSubCommand?: boolean
+  parentCommand?: string
+  subCommandPath?: string[]
 }
 
 const SectionTitle = ({ children }: { children: string }) => (
@@ -38,7 +44,17 @@ export const Help = ({
   usage,
   examples = [],
   footer,
+  isSubCommand,
+  parentCommand,
+  subCommandPath = [],
 }: HelpData) => {
+  const renderCommandLabel = (command: HelpCommandItem) => {
+    if (command.isSubCommand && command.parentCommand && command.subCommandPath && command.subCommandPath.length > 0) {
+      return `${command.parentCommand} ${command.subCommandPath.join(' ')}`
+    }
+    return command.name
+  }
+
   return (
     <div className="flex h-full w-full flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 text-slate-900">
       <div className="flex items-center justify-between">
@@ -73,6 +89,14 @@ export const Help = ({
               <span className="text-xs text-slate-500 col-span-1 flex justify-end overflow-wrap-anywhere break-words">{description || '无描述'}</span>
             </div>
             <div className="grid grid-cols-12 gap-2 text-xs">
+              {isSubCommand && parentCommand && subCommandPath.length > 0 && (
+                <>
+                  <span className="text-slate-500 whitespace-nowrap col-span-1">父命令</span>
+                  <CodeBlock color='secondary' block className="col-span-11">{parentCommand}</CodeBlock>
+                  <span className="text-slate-500 whitespace-nowrap col-span-1">子命令</span>
+                  <CodeBlock color='secondary' block className="col-span-11">{subCommandPath.join(' ')}</CodeBlock>
+                </>
+              )}
               <span className="text-slate-500 whitespace-nowrap col-span-1">用法</span>
               <CodeBlock color='primary' block className="col-span-11">{usage || '未提供'}</CodeBlock>
               {examples.length > 0 && (
@@ -101,7 +125,7 @@ export const Help = ({
                   className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 pt-1"
                 >
                   <div className="grid grid-cols-2 items-center gap-2 justify-between">
-                    <span className="text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words">{command.name}</span>
+                    <span className="text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words">{renderCommandLabel(command)}</span>
                     <span className="text-xs text-slate-500 col-span-1 flex justify-end overflow-wrap-anywhere break-words">{command.description || '无描述'}</span>
                   </div>
                   <div className="grid grid-cols-12 gap-2 text-xs">

@@ -14,6 +14,9 @@ type CommandInfo = {
   moduleName: string
   usage?: string
   examples?: string[]
+  isSubCommand?: boolean
+  parentCommand?: string
+  subCommandPath?: string[]
 }
 
 export class CommandManager {
@@ -53,16 +56,24 @@ export class CommandManager {
 
     if (moduleClass.commands) {
       for (const [name, command] of moduleClass.commands.entries()) {
-        logger.debug(`注册命令: ${name}`)
+        const isSubCommand = Boolean(command.isSubCommand)
+        const subPath = command.subCommandPath ?? []
+        const fullName = isSubCommand
+          ? [moduleName, ...subPath].join(' ').trim()
+          : name
+        logger.debug(`注册命令: ${fullName}`)
         const permission = moduleClass.permissions?.get(command.propertyKey) || ''
-        this.commands.set(name, {
+        this.commands.set(fullName, {
           handler: command.handler.bind(module),
           permission,
-          name,
+          name: fullName,
           description: command.description || '',
           moduleName,
           usage: command.usage,
-          examples: command.examples
+          examples: command.examples,
+          isSubCommand,
+          parentCommand: isSubCommand ? moduleName : undefined,
+          subCommandPath: isSubCommand ? subPath : undefined,
         })
       }
     }
@@ -70,8 +81,21 @@ export class CommandManager {
     module.initialize()
   }
 
+  private resolveCommand(command: string, args: string[]) {
+    const parts = [command, ...args]
+    for (let i = parts.length; i >= 1; i -= 1) {
+      const name = parts.slice(0, i).join(' ')
+      const cmd = this.commands.get(name)
+      if (cmd) {
+        return { cmd, remainingArgs: parts.slice(i) }
+      }
+    }
+    return null
+  }
+
   async handleCommand(bot: NCWebsocket, message: EnhancedMessage, command: string, args: string[]) {
-    const cmd = this.commands.get(command)
+    const resolved = this.resolveCommand(command, args)
+    const cmd = resolved?.cmd
     if (!cmd) {
       await message.reply([
         Structs.text("未知命令")
@@ -93,7 +117,8 @@ export class CommandManager {
       logger.debug(`执行命令: ${command}${args.length ? `参数: ${args.join(' ')}` : ''}`)
       try {
         const startAt = Date.now()
-        await cmd.handler(bot, message, args)
+        const remainingArgs = resolved?.remainingArgs ?? args
+        await cmd.handler(bot, message, remainingArgs)
         logger.debug(`命令耗时: ${command} ${Date.now() - startAt}ms`)
       } catch (error) {
         logger.error('命令执行错误: ')

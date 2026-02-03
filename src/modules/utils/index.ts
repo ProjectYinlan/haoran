@@ -74,7 +74,19 @@ export default class ExampleModule extends BaseCommand {
       if (value.startsWith('.')) return `${prefix}${value.slice(1)}`
       return `${prefix}${value}`
     }
-    const target = (args[0] ?? '').trim()
+    const withModulePrefix = (value: string, moduleName: string) => {
+      const trimmed = value.trim()
+      if (!trimmed) return trimmed
+      if (trimmed.startsWith(`${moduleName} `) || trimmed === moduleName) return trimmed
+      if (trimmed.startsWith(`${prefix}${moduleName} `) || trimmed === `${prefix}${moduleName}`) {
+        return trimmed.slice(prefix.length)
+      }
+      if (trimmed.startsWith(`.${moduleName} `) || trimmed === `.${moduleName}`) {
+        return trimmed.slice(1)
+      }
+      return `${moduleName} ${trimmed}`
+    }
+    const target = args.join(' ').trim()
 
     if (!target) {
       const modules = commandManager.getModules().sort()
@@ -97,14 +109,25 @@ export default class ExampleModule extends BaseCommand {
     const moduleCommands = commandManager.getCommandsByModule(target)
     if (moduleCommands.length > 0) {
       const commands = moduleCommands
-        .map((command) => ({
-          name: normalizePrefix(command.name),
-          description: command.description,
-          usage: command.usage ? normalizePrefix(command.usage) : undefined,
-          examples: command.examples && command.examples.length > 0
-            ? command.examples.map((example) => normalizePrefix(example))
-            : [],
-        }))
+        .map((command) => {
+          const usageBase = command.usage
+            ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
+            : command.name
+          const examplesBase = command.examples && command.examples.length > 0
+            ? command.examples.map((example) => (
+              command.isSubCommand ? withModulePrefix(example, command.moduleName) : example
+            ))
+            : [command.name]
+          return {
+            name: normalizePrefix(command.name),
+            description: command.description,
+            usage: normalizePrefix(usageBase),
+            examples: examplesBase.map((example) => normalizePrefix(example)),
+            isSubCommand: command.isSubCommand,
+            parentCommand: command.parentCommand ? normalizePrefix(command.parentCommand) : undefined,
+            subCommandPath: command.subCommandPath,
+          }
+        })
       const data: HelpData = {
         title: '指令帮助',
         scope: 'module',
@@ -123,16 +146,25 @@ export default class ExampleModule extends BaseCommand {
 
     const command = commandManager.getCommandByName(target)
     if (command) {
+      const usageBase = command.usage
+        ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
+        : command.name
+      const examplesBase = command.examples && command.examples.length > 0
+        ? command.examples.map((example) => (
+          command.isSubCommand ? withModulePrefix(example, command.moduleName) : example
+        ))
+        : [command.name]
       const data: HelpData = {
         title: '指令帮助',
         scope: 'command',
         moduleName: command.moduleName,
         commandName: normalizePrefix(command.name),
         description: command.description,
-        usage: command.usage ? normalizePrefix(command.usage) : undefined,
-        examples: command.examples && command.examples.length > 0
-          ? command.examples.map((example) => normalizePrefix(example))
-          : [],
+        usage: normalizePrefix(usageBase),
+        examples: examplesBase.map((example) => normalizePrefix(example)),
+        isSubCommand: command.isSubCommand,
+        parentCommand: command.parentCommand ? normalizePrefix(command.parentCommand) : undefined,
+        subCommandPath: command.subCommandPath,
       }
       await message.reply([
         Structs.image(await renderTemplate(Help(data), {
@@ -216,7 +248,7 @@ export default class ExampleModule extends BaseCommand {
         permissionTagColor: roleTag?.color,
       }), {
         width: 250,
-        height: 100
+        height: 125
       }))
     ])
   }

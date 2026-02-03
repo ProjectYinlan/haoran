@@ -19,7 +19,7 @@ export const Frame = ({ children, fit = false, meta }: { children: React.ReactNo
   return (
     <div className={['flex flex-col gap-2 w-full bg-white p-4 pb-3 font-sans', fit ? 'h-auto' : 'h-full'].join(' ')}>
       {children}
-      <div className="flex flex-col text-2xs text-slate-500 text-center">
+      <div className="flex flex-col text-3xs text-slate-300 text-center">
         <span>Powered by {runtimeMeta.poweredBy}.{runtimeMeta.botName && ` Bot: ${runtimeMeta.botName}`}</span>
         <span>
           Generated at {dayjs(generatedAt).format('YYYY-MM-DD HH:mm:ss')}.
