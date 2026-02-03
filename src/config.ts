@@ -8,6 +8,7 @@ const logger = createLogger('config');
 const configSchema = z.object({
   bot: z.object({
     name: z.string().optional(),
+    ignoreGroupPrivate: z.boolean().optional(),
   }).optional(),
   ob: z.object({
     protocol: z.enum(['ws', 'wss']),

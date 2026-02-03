@@ -16,6 +16,11 @@ export async function connect() {
     moduleLoader.loadModules()
 
     bot.on('message', async (message: Message) => {
+      // 忽略群临时会话
+      if (configManager.config.bot?.ignoreGroupPrivate && message.message_type === 'private' && (message as any).sub_type === 'group') {
+        return
+      }
+
       const globalPrefix = configManager.config.command?.globalPrefix || '.'
       const msg = message.message.reduce((text, content) => {
         if (content.type === 'text') {
