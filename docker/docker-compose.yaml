@@ -1,6 +1,6 @@
 services:
   haoran:
-    image: haoran:latest
+    image: colour93/haoran:latest
     container_name: haoran
     restart: unless-stopped
     environment:
