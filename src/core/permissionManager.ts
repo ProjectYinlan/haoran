@@ -11,8 +11,8 @@ export enum Role {
 const DEFAULT_ROLE_PERMISSIONS: Record<Role, string[]> = {
   [Role.Owner]: ['*'],
   [Role.BotAdmin]: ['*'],
-  [Role.GroupAdmin]: ['utils.*', 'question.*'],
-  [Role.Member]: []
+  [Role.GroupAdmin]: ['question.*', 'vault.*', 'stand-on-the-street.*'],
+  [Role.Member]: ['vault.*', 'stand-on-the-street.*']
 }
 
 const matchPermission = (rule: string, permission: string): boolean => {

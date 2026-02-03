@@ -17,9 +17,6 @@ async function main() {
     // 预热模板渲染器，避免首次渲染卡顿
     await warmupTemplateRenderer()
 
-    // 监听配置变更，支持权限热重载
-    configManager.startWatcher()
-
     // 启动机器人
     await connect()
   } catch (error) {

@@ -10,6 +10,7 @@ import { renderTemplate } from '../../core/playwright.js'
 import { PermissionManager, Role } from '../../core/permissionManager.js'
 import { CommandManager } from '../../core/commandManager.js'
 import { configManager } from '../../config.js'
+import { resolveScope } from '../../utils/index.js'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
 const permissionManager = new PermissionManager()
@@ -27,26 +28,6 @@ const parsePermissions = (value?: string) => {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
-}
-
-const resolveScope = (message: EnhancedMessage, scopeArg?: string) => {
-  if (!scopeArg) {
-    if (message.message_type === 'group') {
-      return { type: 'group' as const, groupId: message.group_id }
-    }
-    return { type: 'global' as const }
-  }
-
-  if (['global', 'all', '*'].includes(scopeArg)) {
-    return { type: 'global' as const }
-  }
-
-  const groupId = parseNumber(scopeArg)
-  if (groupId !== undefined) {
-    return { type: 'group' as const, groupId }
-  }
-
-  return { type: 'global' as const }
 }
 
 const ensureRbacConfig = (configData: Record<string, any>) => {
@@ -116,14 +97,13 @@ export default class ExampleModule extends BaseCommand {
     const moduleCommands = commandManager.getCommandsByModule(target)
     if (moduleCommands.length > 0) {
       const commands = moduleCommands
-        .sort((a, b) => a.name.localeCompare(b.name))
         .map((command) => ({
           name: normalizePrefix(command.name),
-          description: command.description || '无描述',
-          usage: command.usage ? normalizePrefix(command.usage) : '未提供',
+          description: command.description,
+          usage: command.usage ? normalizePrefix(command.usage) : undefined,
           examples: command.examples && command.examples.length > 0
             ? command.examples.map((example) => normalizePrefix(example))
-            : ['未提供'],
+            : [],
         }))
       const data: HelpData = {
         title: '指令帮助',
@@ -148,11 +128,11 @@ export default class ExampleModule extends BaseCommand {
         scope: 'command',
         moduleName: command.moduleName,
         commandName: normalizePrefix(command.name),
-        description: command.description || '无描述',
-        usage: command.usage ? normalizePrefix(command.usage) : '未提供',
+        description: command.description,
+        usage: command.usage ? normalizePrefix(command.usage) : undefined,
         examples: command.examples && command.examples.length > 0
           ? command.examples.map((example) => normalizePrefix(example))
-          : ['未提供'],
+          : [],
       }
       await message.reply([
         Structs.image(await renderTemplate(Help(data), {
@@ -381,6 +361,18 @@ export default class ExampleModule extends BaseCommand {
 
     await message.reply([
       Structs.text('角色成员已更新')
+    ])
+  }
+
+  @Command('reload', '重载配置')
+  @Usage('reload')
+  @Permission(MANAGE_PERMISSION)
+  async handleReload(
+    @Message() message: EnhancedMessage,
+  ) {
+    configManager.reload()
+    await message.reply([
+      Structs.text('配置已重载')
     ])
   }
 } 

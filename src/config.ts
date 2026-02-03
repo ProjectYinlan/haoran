@@ -108,17 +108,6 @@ export class ConfigManager {
       return false
     }
   }
-
-  startWatcher() {
-    if (this.watchStarted) return
-    this.watchStarted = true
-
-    fs.watchFile(CONFIG_PATH, { interval: 1000 }, (curr, prev) => {
-      if (curr.mtimeMs === prev.mtimeMs) return
-      logger.info('检测到配置变更，重载中')
-      this.reload()
-    })
-  }
 }
 
 export const configManager = new ConfigManager()
