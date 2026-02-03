@@ -191,6 +191,30 @@ export function Example(example: string | string[]) {
   }
 }
 
+// 私聊限制装饰器
+const PRIVATE_ONLY_KEY = Symbol('private_only')
+export function PrivateOnly(hint?: string) {
+  return function (target: any, propertyKey: string) {
+    Reflect.defineMetadata(PRIVATE_ONLY_KEY, hint ?? '该命令仅限私聊使用', target, propertyKey)
+  }
+}
+
+// 群聊限制装饰器
+const GROUP_ONLY_KEY = Symbol('group_only')
+export function GroupOnly(hint?: string) {
+  return function (target: any, propertyKey: string) {
+    Reflect.defineMetadata(GROUP_ONLY_KEY, hint ?? '该命令仅限群聊使用', target, propertyKey)
+  }
+}
+
+export const getPrivateOnlyHint = (target: any, propertyKey: string): string | undefined => {
+  return Reflect.getMetadata(PRIVATE_ONLY_KEY, target, propertyKey)
+}
+
+export const getGroupOnlyHint = (target: any, propertyKey: string): string | undefined => {
+  return Reflect.getMetadata(GROUP_ONLY_KEY, target, propertyKey)
+}
+
 // 模块装饰器
 export function Module(name: string) {
   return function (constructor: Function) {

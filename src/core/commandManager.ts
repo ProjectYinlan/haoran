@@ -1,5 +1,5 @@
 import { GroupMessage, NCWebsocket, PrivateFriendMessage, PrivateGroupMessage, Structs } from 'node-napcat-ts'
-import { BaseCommand } from './decorators.js'
+import { BaseCommand, getPrivateOnlyHint, getGroupOnlyHint } from './decorators.js'
 import { EnhancedMessage } from '../typings/Message.js'
 import { createLogger } from '../logger.js'
 import { PermissionManager } from './permissionManager.js'
@@ -17,6 +17,8 @@ type CommandInfo = {
   isSubCommand?: boolean
   parentCommand?: string
   subCommandPath?: string[]
+  propertyKey: string
+  moduleInstance: BaseCommand
 }
 
 export class CommandManager {
@@ -74,6 +76,8 @@ export class CommandManager {
           isSubCommand,
           parentCommand: isSubCommand ? moduleName : undefined,
           subCommandPath: isSubCommand ? subPath : undefined,
+          propertyKey: command.propertyKey,
+          moduleInstance: module,
         })
       }
     }
@@ -114,6 +118,19 @@ export class CommandManager {
         ])
         return
       }
+
+      // 检查私聊/群聊限制
+      const privateOnlyHint = getPrivateOnlyHint(cmd.moduleInstance, cmd.propertyKey)
+      if (privateOnlyHint && message.message_type !== 'private') {
+        await message.reply([Structs.text(privateOnlyHint)])
+        return
+      }
+      const groupOnlyHint = getGroupOnlyHint(cmd.moduleInstance, cmd.propertyKey)
+      if (groupOnlyHint && message.message_type !== 'group') {
+        await message.reply([Structs.text(groupOnlyHint)])
+        return
+      }
+
       logger.debug(`执行命令: ${command}${args.length ? `参数: ${args.join(' ')}` : ''}`)
       try {
         const startAt = Date.now()
