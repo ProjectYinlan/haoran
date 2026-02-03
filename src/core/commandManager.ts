@@ -1,5 +1,5 @@
 import { GroupMessage, NCWebsocket, PrivateFriendMessage, PrivateGroupMessage, Structs } from 'node-napcat-ts'
-import { BaseCommand, getPrivateOnlyHint, getGroupOnlyHint } from './decorators.js'
+import { BaseCommand, getPrivateOnlyHint, getGroupOnlyHint, getCommandOptions } from './decorators.js'
 import { EnhancedMessage } from '../typings/Message.js'
 import { createLogger } from '../logger.js'
 import { PermissionManager } from './permissionManager.js'
@@ -25,6 +25,8 @@ type CommandInfo = {
   subCommandPath?: string[]
   propertyKey: string
   moduleInstance: BaseCommand
+  noPrefix?: boolean
+  regex?: RegExp
 }
 
 // 存储收集中的消息
@@ -49,7 +51,21 @@ export class CommandManager {
   }
 
   getModules() {
-    return Array.from(new Set(this.getCommandList().map((command) => command.moduleName)))
+    const modules = new Map<string, { name: string, description?: string }>()
+    for (const command of this.getCommandList()) {
+      if (!modules.has(command.moduleName)) {
+        modules.set(command.moduleName, {
+          name: command.moduleName,
+          description: (command.moduleInstance.constructor as any).moduleDescription,
+        })
+      }
+    }
+    return Array.from(modules.values())
+  }
+
+  getModuleInfo(moduleName: string) {
+    const modules = this.getModules()
+    return modules.find((item) => item.name === moduleName)
   }
 
   getCommandsByModule(moduleName: string) {
@@ -72,6 +88,7 @@ export class CommandManager {
         const fullName = isSubCommand
           ? [moduleName, ...subPath].join(' ').trim()
           : name
+        const commandOptions = getCommandOptions(module, command.propertyKey)
         logger.debug(`注册命令: ${fullName}`)
         const permission = moduleClass.permissions?.get(command.propertyKey) || ''
         this.commands.set(fullName, {
@@ -87,6 +104,8 @@ export class CommandManager {
           subCommandPath: isSubCommand ? subPath : undefined,
           propertyKey: command.propertyKey,
           moduleInstance: module,
+          noPrefix: commandOptions.noPrefix,
+          regex: commandOptions.regex,
         })
       }
     }
@@ -100,10 +119,86 @@ export class CommandManager {
       const name = parts.slice(0, i).join(' ')
       const cmd = this.commands.get(name)
       if (cmd) {
+        if (cmd.noPrefix || cmd.regex) {
+          continue
+        }
         return { cmd, remainingArgs: parts.slice(i) }
       }
     }
     return null
+  }
+
+  private matchNoPrefixCommand(content: string) {
+    const trimmed = content.trim()
+    const candidates = Array.from(this.commands.values())
+      .filter(cmd => cmd.noPrefix)
+      .sort((a, b) => b.name.length - a.name.length)
+    for (const cmd of candidates) {
+      if (trimmed === cmd.name) {
+        return { cmd, remainingArgs: [] as string[] }
+      }
+      if (trimmed.startsWith(`${cmd.name} `)) {
+        const remaining = trimmed.slice(cmd.name.length).trim()
+        const args = remaining.length ? remaining.split(' ') : []
+        return { cmd, remainingArgs: args }
+      }
+    }
+    return null
+  }
+
+  private matchRegexCommand(content: string) {
+    const candidates = Array.from(this.commands.values()).filter(cmd => cmd.regex)
+    for (const cmd of candidates) {
+      cmd.regex!.lastIndex = 0
+      const match = cmd.regex!.exec(content)
+      if (match) {
+        return { cmd, remainingArgs: match.slice(1) }
+      }
+    }
+    return null
+  }
+
+  async handlePlainMessage(bot: NCWebsocket, message: EnhancedMessage, content: string) {
+    const resolved = this.matchNoPrefixCommand(content) ?? this.matchRegexCommand(content)
+    const cmd = resolved?.cmd
+    if (!cmd) return
+
+    const roles = this.permissionManager.getRoles(message)
+    const source = message.message_type === 'group'
+      ? `group:${message.group_id}`
+      : `private:${message.sender.user_id}`
+    logger.debug(`权限检查: source=${source} user=${message.sender.user_id} roles=${roles.join(',')} required=${cmd.permission || 'none'}`)
+    if (cmd.permission && !this.permissionManager.hasPermission(message, cmd.permission)) {
+      await message.reply([
+        Structs.text("你没有执行此命令的权限")
+      ])
+      return
+    }
+
+    const privateOnlyHint = getPrivateOnlyHint(cmd.moduleInstance, cmd.propertyKey)
+    if (privateOnlyHint && message.message_type !== 'private') {
+      await message.reply([Structs.text(privateOnlyHint)])
+      return
+    }
+    const groupOnlyHint = getGroupOnlyHint(cmd.moduleInstance, cmd.propertyKey)
+    if (groupOnlyHint && message.message_type !== 'group') {
+      await message.reply([Structs.text(groupOnlyHint)])
+      return
+    }
+
+    const remainingArgs = resolved?.remainingArgs ?? []
+
+    try {
+      const startAt = Date.now()
+      await cmd.handler(bot, message, remainingArgs)
+      logger.debug(`命令耗时: ${cmd.name} ${Date.now() - startAt}ms`)
+    } catch (error) {
+      logger.error('命令执行错误: ')
+      logger.error(error)
+      await message.reply([
+        Structs.text("命令执行出错")
+      ])
+    }
   }
 
   private getSessionKey(userId: number, groupId?: number): string {

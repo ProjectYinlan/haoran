@@ -19,6 +19,7 @@ const PARAM_METADATA_KEY = Symbol('param_metadata')
 const USAGE_METADATA_KEY = Symbol('usage_metadata')
 const EXAMPLE_METADATA_KEY = Symbol('example_metadata')
 const COLLECTED_PARAM_INDEX_KEY = Symbol('collected_param_index')
+const COMMAND_OPTIONS_KEY = Symbol('command_options')
 
 // 参数类型
 export enum ParamType {
@@ -28,7 +29,8 @@ export enum ParamType {
   CONTENT = 'content',
   SENDER = 'sender',
   GROUP_ID = 'group_id',
-  COLLECTED = 'collected'
+  COLLECTED = 'collected',
+  AT = 'at'
 }
 
 // 参数装饰器
@@ -50,9 +52,35 @@ export const Content = () => Param(ParamType.CONTENT)
 export const Sender = () => Param(ParamType.SENDER)
 export const GroupId = () => Param(ParamType.GROUP_ID)
 export const Collected = () => Param(ParamType.COLLECTED)
+export const At = () => Param(ParamType.AT)
+
+type CommandOptions = {
+  noPrefix?: boolean
+  regex?: RegExp
+}
+
+export const getCommandOptions = (target: any, propertyKey: string): CommandOptions => {
+  return Reflect.getMetadata(COMMAND_OPTIONS_KEY, target, propertyKey) || {}
+}
+
+const setCommandOptions = (target: any, propertyKey: string, options: CommandOptions) => {
+  Reflect.defineMetadata(COMMAND_OPTIONS_KEY, options, target, propertyKey)
+}
 
 // 命令装饰器
 export function Command(name: string, description: string = '') {
+  return createCommandDecorator(name, description, {})
+}
+
+export function NoPrefixCommand(name: string, description: string = '') {
+  return createCommandDecorator(name, description, { noPrefix: true })
+}
+
+export function RegexCommand(pattern: RegExp, description: string = '') {
+  return createCommandDecorator(pattern.toString(), description, { regex: pattern })
+}
+
+function createCommandDecorator(name: string, description: string, options: CommandOptions) {
   return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
     if (!target.constructor.commands) {
       target.constructor.commands = new Map()
@@ -63,6 +91,7 @@ export function Command(name: string, description: string = '') {
       Reflect.getMetadata(PARAM_METADATA_KEY, target, propertyKey) || []
     const usage: string | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
     const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
+    setCommandOptions(target, propertyKey, options)
 
     // 包装原始方法
     const originalMethod = descriptor.value
@@ -97,6 +126,12 @@ export function Command(name: string, description: string = '') {
             break
           case ParamType.COLLECTED:
             paramValues[index] = collected ?? []
+            break
+          case ParamType.AT:
+            paramValues[index] = message.message
+              .filter(segment => segment.type === 'at')
+              .map(segment => Number(segment.data.qq))
+              .filter(value => Number.isFinite(value))
             break
         }
       }
@@ -241,6 +276,12 @@ export function Module(name: string) {
   }
 }
 
+export function ModuleDescription(description: string) {
+  return function (constructor: Function) {
+    ;(constructor as any).moduleDescription = description
+  }
+}
+
 // 基础命令类
 export abstract class BaseCommand {
   static commands: Map<string, {
@@ -255,6 +296,7 @@ export abstract class BaseCommand {
   }>
   static permissions: Map<string, string>
   static moduleName: string
+  static moduleDescription?: string
 
   get moduleName(): string {
     return (this.constructor as any).moduleName

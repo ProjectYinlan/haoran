@@ -36,3 +36,11 @@ ob:
 # modules:
 #   example-module:
 #     enabled: true
+#   stand-on-the-street:
+#     enabled: true
+#     devMode: false
+#     cooldownHours: 12
+#     forceExtraHours: 18
+#     forceCommissionRate: 0.5
+#     richCommissionRate: 0.2
+#     richBalanceThreshold: 20000

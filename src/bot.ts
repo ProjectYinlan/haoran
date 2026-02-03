@@ -57,7 +57,10 @@ export async function connect() {
         return text
       }, "")
 
-      if (!msg.startsWith(globalPrefix || '.')) return
+      if (!msg.startsWith(globalPrefix || '.')) {
+        await commandManager.handlePlainMessage(bot, enhancedMessage, msg)
+        return
+      }
 
       const [command, ...args] = msg
         .slice(globalPrefix.length)

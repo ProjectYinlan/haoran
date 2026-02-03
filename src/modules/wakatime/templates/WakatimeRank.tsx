@@ -36,7 +36,7 @@ const getMedalColor = (rank: number): 'warning' | 'secondary' | 'danger' | 'ligh
   return 'light'
 }
 
-export const WakatimeRank = ({ title, date, users }: WakatimeRankData) => {
+export const WakatimeRank = ({ title, date, users = [] }: WakatimeRankData) => {
   const maxSeconds = Math.max(...users.map(u => u.totalSeconds), 1)
 
   return (

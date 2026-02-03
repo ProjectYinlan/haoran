@@ -4,7 +4,9 @@ import { Frame } from '../core/templates/Frame.js'
 import { templates } from './templateRegistry.js'
 
 export const App = () => {
-  const [selectedId, setSelectedId] = useState(() => templates[0]?.id ?? '')
+  const initialTemplate = templates[0]
+  const initialData = (initialTemplate?.defaultData ?? null) as Record<string, unknown> | null
+  const [selectedId, setSelectedId] = useState(() => initialTemplate?.id ?? '')
   const [sizeById, setSizeById] = useState<Record<string, { width: number, height: number, autoWidth: boolean, autoHeight: boolean }>>(() => {
     const entries = templates.map(template => {
       const size = template.size
@@ -31,13 +33,17 @@ export const App = () => {
   })
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [hasValid, setHasValid] = useState(true)
-  const [parsedData, setParsedData] = useState<Record<string, unknown>>({})
+  const [parsedData, setParsedData] = useState<Record<string, unknown> | null>(() => initialData)
+  const [dataReady, setDataReady] = useState(() => Boolean(initialData))
   const previewRef = useRef<HTMLDivElement | null>(null)
   const editorRef = useRef<any>(null)
   const editorContainerRef = useRef<HTMLDivElement | null>(null)
   const [measuredWidth, setMeasuredWidth] = useState<number | null>(null)
   const [measuredHeight, setMeasuredHeight] = useState<number | null>(null)
   const selectedTemplate = templates.find(template => template.id === selectedId) ?? templates[0]
+  const fallbackData = useMemo(() => {
+    return (selectedTemplate?.defaultData ?? null) as Record<string, unknown> | null
+  }, [selectedTemplate?.id])
   const jsonText = selectedTemplate ? (jsonById[selectedTemplate.id] ?? '') : ''
   const appliedJsonText = selectedTemplate ? (appliedJsonById[selectedTemplate.id] ?? '') : ''
   const previewSize = selectedTemplate?.size
@@ -75,16 +81,22 @@ export const App = () => {
     if (!selectedTemplate) {
       return
     }
+    setDataReady(false)
     try {
       const data = JSON.parse(appliedJsonText) as Record<string, unknown>
       setJsonError(null)
       setHasValid(true)
       setParsedData(data)
+      setDataReady(true)
     } catch (error) {
       setJsonError(error instanceof Error ? error.message : 'JSON 解析失败')
       setHasValid(false)
+      if (fallbackData) {
+        setParsedData(fallbackData)
+        setDataReady(true)
+      }
     }
-  }, [appliedJsonText, selectedTemplate])
+  }, [appliedJsonText, selectedTemplate, fallbackData])
 
   useEffect(() => {
     if (!autoHeight && !autoWidth) {
@@ -219,8 +231,12 @@ export const App = () => {
             >
               <div ref={previewRef}>
                 <Frame fit>
-              <selectedTemplate.component {...(hasValid ? parsedData : {})} />
-            </Frame>
+                  {dataReady && (parsedData || fallbackData) ? (
+                    <selectedTemplate.component {...(parsedData || fallbackData || {})} />
+                  ) : (
+                    <div className="p-3 text-xs text-slate-400">数据加载中...</div>
+                  )}
+                </Frame>
               </div>
             </div>
           </div>

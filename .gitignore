@@ -12,8 +12,8 @@ dist
 
 config.yaml
 
-src/external-modules/*
-!src/external-modules/example
+# src/external-modules/*
+# !src/external-modules/example
 
 data.db
 

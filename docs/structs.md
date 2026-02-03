@@ -72,7 +72,10 @@ export default class DemoModule extends BaseCommand {
 
 说明：
 - `@Module('name')` 定义模块名。
+- `@ModuleDescription('说明')` 定义模块说明（用于 help 展示玩法/用途）。
 - `@Command('命令', '描述')` 定义命令名称（触发方式为 `.命令`）。
+- `@NoPrefixCommand('命令', '描述')` 定义**无前缀**命令（直接文本匹配）。
+- `@RegexCommand(/正则/, '描述')` 定义**正则命令**（消息全文匹配）。
 - `@Usage('用法')` 描述指令用法（用于 help 展示）。
 - `@Example('示例')` 描述指令示例（可重复多次，用于 help 展示），当命令用法并没有参数时，不推荐编写示例。
 - `@Permission('permission.code')` 为命令添加权限标识，RBAC 会在执行前校验。
@@ -82,16 +85,17 @@ export default class DemoModule extends BaseCommand {
   - `@Content()` 原始文本内容
   - `@Sender()` 发送者
   - `@GroupId()` 群号
+  - `@At()` 被 @ 的用户 ID 列表
 
-全局命令前缀在 `config.yaml` 中可以进行配置，默认为 `.`。
+全局命令前缀在 `config.yaml` 中可以进行配置，默认为 `.`。无前缀命令与正则命令会在**未以命令前缀开头**时进行匹配。
 
 ## help 指令
 
 内置在 `utils` 模块，使用方式：
 
 - `.help` 列出可用模块
-- `.help <module>` 列出该模块下所有命令的描述、用法、示例
-- `.help <command>` 显示该命令的描述、用法、示例与所属模块
+- `.help <module>` 列出该模块下所有命令的描述、用法、示例与**命令匹配方式**
+- `.help <command>` 显示该命令的描述、用法、示例与所属模块（含无前缀/正则命令的匹配说明）
 
 ## Structs 消息构造与回复
 

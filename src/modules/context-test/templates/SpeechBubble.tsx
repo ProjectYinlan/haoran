@@ -33,7 +33,7 @@ export type ChatHistoryData = {
 
 export const ChatHistory = ({ messages }: ChatHistoryData) => {
   return (
-    <div className="flex flex-col gap-2 p-4 bg-white rounded-xl">
+    <div className="flex flex-col gap-2 p-2 bg-white rounded-xl">
       <div className="text-xs text-slate-400 text-center mb-2">
         {new Date().toLocaleDateString('zh-CN')} 对话记录
       </div>

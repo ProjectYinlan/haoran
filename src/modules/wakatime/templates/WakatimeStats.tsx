@@ -29,7 +29,7 @@ const StatItem = ({ name, value, percent, color }: { name: string; value: string
 export type WakatimeStatsCardData = {
   type: 'stats'
   username: string
-  stats: WakatimeStats
+  stats?: WakatimeStats
   showProjects?: boolean
   avatarUrl?: string
 }
@@ -70,9 +70,9 @@ export const WakatimeCard = (data: WakatimeCardData) => {
 }
 
 const WakatimeStatsCard = ({ username, stats, showProjects = false, avatarUrl }: WakatimeStatsCardData) => {
-  const maxLangSeconds = Math.max(...stats.languages.map(l => l.totalSeconds), 1)
-  
-  return (
+  const maxLangSeconds = stats ? Math.max(...stats.languages.map(l => l.totalSeconds), 1) : 0
+
+  return stats ? (
     <div className="flex flex-col gap-3 p-4 bg-white rounded-xl border border-slate-200">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -166,12 +166,12 @@ const WakatimeStatsCard = ({ username, stats, showProjects = false, avatarUrl }:
         )}
       </div>
     </div>
-  )
+  ) : null
 }
 
 const WakatimeTodayCard = ({ username, stats, showProjects = false, avatarUrl }: WakatimeTodayCardData) => {
   const maxLangSeconds = Math.max(...stats.languages.map(l => l.totalSeconds), 1)
-  
+
   return (
     <div className="flex flex-col gap-3 p-4 bg-white rounded-xl border border-slate-200">
       {/* Header */}

@@ -6,6 +6,7 @@ export type HelpCommandItem = {
   description?: string
   usage?: string
   examples?: string[]
+  matchers?: string[]
   isSubCommand?: boolean
   parentCommand?: string
   subCommandPath?: string[]
@@ -15,12 +16,14 @@ export type HelpData = {
   title: string
   scope: 'modules' | 'module' | 'command'
   moduleName?: string
+  moduleDescription?: string
   commandName?: string
-  modules?: string[]
+  modules?: Array<{ name: string, description?: string }>
   commands?: HelpCommandItem[]
   description?: string
   usage?: string
   examples?: string[]
+  matchers?: string[]
   footer?: string
   isSubCommand?: boolean
   parentCommand?: string
@@ -37,12 +40,14 @@ export const Help = ({
   title,
   scope,
   moduleName,
+  moduleDescription,
   commandName,
   modules = [],
   commands = [],
   description,
   usage,
   examples = [],
+  matchers = [],
   footer,
   isSubCommand,
   parentCommand,
@@ -70,9 +75,12 @@ export const Help = ({
       {scope === 'modules' ? (
         <div className="flex flex-col gap-2">
           <SectionTitle>模块列表</SectionTitle>
-          <div className="flex flex-wrap gap-2">
-            {modules.length > 0 ? modules.map((name) => (
-              <Tag key={name} color="primary" theme="outline-light">{name}</Tag>
+          <div className="flex flex-col gap-2">
+            {modules.length > 0 ? modules.map((module) => (
+              <div key={module.name} className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                <Tag color="primary" theme="outline-light">{module.name}</Tag>
+                <span className="text-xs text-slate-500">{module.description || '暂无说明'}</span>
+              </div>
             )) : (
               <span className="text-xs text-slate-400">暂无模块</span>
             )}
@@ -109,6 +117,16 @@ export const Help = ({
                   </div>
                 </>
               )}
+              {matchers.length > 0 && (
+                <>
+                  <span className="text-slate-500 whitespace-nowrap col-span-1">匹配</span>
+                  <div className="flex flex-wrap gap-1 col-span-11">
+                    {matchers.map((item) => (
+                      <CodeBlock color="secondary" block key={`${commandName}-${item}`}>{item}</CodeBlock>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -117,6 +135,9 @@ export const Help = ({
       {scope === 'module' ? (
         <div className="flex flex-col gap-2">
           <SectionTitle>指令列表</SectionTitle>
+          {moduleDescription ? (
+            <div className="text-xs text-slate-500">{moduleDescription}</div>
+          ) : null}
           {commands.length > 0 ? (
             <div className="flex flex-col gap-2">
               {commands.map((command) => (
@@ -131,6 +152,16 @@ export const Help = ({
                   <div className="grid grid-cols-12 gap-2 text-xs">
                     <span className="text-slate-500 whitespace-nowrap col-span-1">用法</span>
                     <CodeBlock color='primary' block className="col-span-11">{command.usage || '未提供'}</CodeBlock>
+                    {command.matchers && command.matchers.length > 0 && (
+                      <>
+                        <span className="text-slate-500 whitespace-nowrap col-span-1">匹配</span>
+                        <div className="flex flex-wrap gap-1 col-span-11">
+                          {command.matchers.map((item) => (
+                            <CodeBlock color="secondary" block key={`${command.name}-${item}`}>{item}</CodeBlock>
+                          ))}
+                        </div>
+                      </>
+                    )}
                     {command.examples && command.examples.length > 0 && <>
                       <span className="text-slate-500 whitespace-nowrap col-span-1">示例</span>
                       <div className="flex flex-wrap gap-1 col-span-11">
