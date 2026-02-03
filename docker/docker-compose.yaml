@@ -1,0 +1,10 @@
+services:
+  haoran-bot:
+    image: haoran-bot:latest
+    container_name: haoran-bot
+    restart: unless-stopped
+    environment:
+      CONFIG_FILE_PATH: /etc/bot/config.yaml
+    volumes:
+      - /path/to/config:/etc/bot
+      - /path/to/ms-playwright:/ms-playwright

@@ -58,7 +58,22 @@ const configSchema = z.object({
   }).optional()
 });
 
-const CONFIG_PATH = './config.yaml'
+const DEFAULT_CONFIG_PATH = './config.yaml'
+const FALLBACK_CONFIG_PATH = '/etc/bot/config.yaml'
+
+const resolveConfigPath = () => {
+  const envPath = process.env.CONFIG_FILE_PATH
+  if (envPath && fs.existsSync(envPath)) {
+    return envPath
+  }
+  if (fs.existsSync(DEFAULT_CONFIG_PATH)) {
+    return DEFAULT_CONFIG_PATH
+  }
+  if (fs.existsSync(FALLBACK_CONFIG_PATH)) {
+    return FALLBACK_CONFIG_PATH
+  }
+  return null
+}
 
 export class ConfigManager {
   private watchStarted = false
@@ -74,27 +89,34 @@ export class ConfigManager {
   }
 
   private loadConfigFromFile() {
-    if (!fs.existsSync(CONFIG_PATH)) {
+    const configPath = resolveConfigPath()
+    if (!configPath) {
       logger.error('请先创建 config.yaml');
       throw new Error('config.yaml not found');
     }
 
-    const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    const configRaw = fs.readFileSync(configPath, 'utf-8')
     const configParsed = yaml.load(configRaw)
     return configSchema.parse(configParsed)
   }
 
   readConfigRaw(): Record<string, any> {
-    if (!fs.existsSync(CONFIG_PATH)) {
+    const configPath = resolveConfigPath()
+    if (!configPath) {
       logger.error('请先创建 config.yaml');
       throw new Error('config.yaml not found');
     }
-    const configRaw = fs.readFileSync(CONFIG_PATH, 'utf-8')
+    const configRaw = fs.readFileSync(configPath, 'utf-8')
     return (yaml.load(configRaw) ?? {}) as Record<string, any>
   }
 
   saveConfigRaw(data: Record<string, any>) {
-    fs.writeFileSync(CONFIG_PATH, yaml.dump(data, { lineWidth: 120 }))
+    const configPath = resolveConfigPath()
+    if (!configPath) {
+      logger.error('请先创建 config.yaml');
+      throw new Error('config.yaml not found');
+    }
+    fs.writeFileSync(configPath, yaml.dump(data, { lineWidth: 120 }))
   }
 
   reload() {
