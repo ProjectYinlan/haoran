@@ -142,7 +142,13 @@ export default class ExampleModule extends BaseCommand {
           const matchers = isRegex ? [] : parseRegexMatchers(command.regex)
           const noPrefixDisplay = command.noPrefix || isRegex
           const usageBase = command.usage
-            ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
+            ? (
+              command.isSubCommand
+                ? (Array.isArray(command.usage)
+                  ? command.usage.map(item => withModulePrefix(item, command.moduleName))
+                  : withModulePrefix(command.usage, command.moduleName))
+                : command.usage
+            )
             : (isRegex ? '' : command.name)
           const examplesBase = command.examples && command.examples.length > 0
             ? command.examples.map((example) => (
@@ -185,7 +191,13 @@ export default class ExampleModule extends BaseCommand {
       const matchers = isRegex ? [] : parseRegexMatchers(command.regex)
       const noPrefixDisplay = command.noPrefix || isRegex
       const usageBase = command.usage
-        ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
+        ? (
+          command.isSubCommand
+            ? (Array.isArray(command.usage)
+              ? command.usage.map(item => withModulePrefix(item, command.moduleName))
+              : withModulePrefix(command.usage, command.moduleName))
+            : command.usage
+        )
         : (isRegex ? '' : command.name)
       const examplesBase = command.examples && command.examples.length > 0
         ? command.examples.map((example) => (
