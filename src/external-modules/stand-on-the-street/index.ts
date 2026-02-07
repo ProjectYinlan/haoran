@@ -314,10 +314,15 @@ export default class StandOnTheStreetModule extends BaseCommand {
     ts: number,
     force: boolean,
     silent = false,
+    allowDuringCooldown = false,
   ) {
     const devMode = configManager.config.devMode === true
     if (!devMode && record.nextTime && record.nextTime.getTime() > ts) {
       this.logger.debug(`CD中 nextTime=${formatTs(record.nextTime)} ts=${ts} force=${force}`)
+      if (allowDuringCooldown && !record.force) {
+        this.logger.debug(`连续站街允许跳过普通CD`)
+        return { canProceed: true, force }
+      }
       if (!force) {
         if (!silent) {
           const nextTime = formatTs(record.nextTime)
@@ -534,6 +539,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     force: boolean,
     atList: number[] = [],
     silentCooldown = false,
+    allowDuringCooldown = false,
   ) {
     this.logger.debug(`执行站街 type=${type} userId=${message.sender.user_id} force=${force} atList=${JSON.stringify(atList)}`)
     if (standConfig?.enabled === false) {
@@ -559,7 +565,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       cd: record.nextTime ? formatTs(record.nextTime) : null
     })}`)
 
-    const cooldownResult = await this.resolveCooldown(message, record, ts, force, silentCooldown)
+    const cooldownResult = await this.resolveCooldown(message, record, ts, force, silentCooldown, allowDuringCooldown)
     if (!cooldownResult.canProceed) {
       this.logger.debug(`站街中断: CD未到或不可强制`)
       return
@@ -862,7 +868,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     message: EnhancedMessage,
     bot: NCWebsocket,
   ) {
-    const first = await this.executeStandOnce(message, bot, 'random', false, [], false)
+    const first = await this.executeStandOnce(message, bot, 'random', false, [], false, true)
     if (!first) return
 
     let round = 1
@@ -878,7 +884,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     let totalForceCommission = first.forceCommission
 
     while (round < 10) {
-      const next = await this.executeStandOnce(message, bot, 'random', true, [], true)
+      const next = await this.executeStandOnce(message, bot, 'random', true, [], true, true)
       if (!next) break
       round += 1
       latestRecord = next.record
