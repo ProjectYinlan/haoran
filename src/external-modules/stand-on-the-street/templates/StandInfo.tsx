@@ -1,6 +1,6 @@
 import { Wallet, Users, User } from 'lucide-react'
 import { getMaskString, getShortNumberString } from '../../../utils/index.js'
-import { Tag } from '../../../core/components/Tag'
+import { Tag } from '../../../core/components/Tag.js'
 
 export type StandInfoBaseData = {
   per: number

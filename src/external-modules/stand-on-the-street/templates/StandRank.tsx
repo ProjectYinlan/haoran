@@ -1,4 +1,4 @@
-import { Tag } from "../../../core/components/Tag"
+import { Tag } from "../../../core/components/Tag.js"
 import { getMaskString, getShortNumberString } from "../../../utils/index.js"
 
 export type StandRankItem = {
