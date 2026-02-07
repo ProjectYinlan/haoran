@@ -76,7 +76,7 @@ type StandOutcome = {
 
 @Module('stand-on-the-street')
 @ModuleDescription('站街')
-@ModuleVersion('1.1.1')
+@ModuleVersion('1.1.2')
 export default class StandOnTheStreetModule extends BaseCommand {
   private vaultService = VaultService.getInstance()
   private standService = StandService.getInstance()
@@ -159,7 +159,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const totalCount = record.countFriends + record.countOthers
     const per = totalCount > 0 ? Math.ceil(Number(record.statsInto) / totalCount) : 0
     const account = await this.vaultService.getOrCreateAccount(userId, resolveScope(message))
-    const globalAccount = await this.vaultService.getOrCreateAccount(userId, { type: BaseScopeType.GLOBAL })
+    const globalBalance = await this.vaultService.getTotalBalance(userId)
     const globalRecords = await this.standService.getRecordsByScope(userId, { type: BaseScopeType.GLOBAL })
     const globalFriendsCount = globalRecords.reduce((acc, item) => acc + Number(item.countFriends), 0)
     const globalTotalCount = globalRecords.reduce((acc, item) => acc + Number(item.countFriends) + Number(item.countOthers), 0)
@@ -190,7 +190,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       },
       global: {
         per: globalPer,
-        balance: Number(globalAccount.balance),
+        balance: Number(globalBalance),
         totalCount: globalTotalCount,
         friendsCount: globalFriendsCount,
       }

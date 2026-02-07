@@ -44,6 +44,13 @@ export class VaultService {
     return account
   }
 
+  async getTotalBalance(userId: number) {
+    const accounts = await this.getRepository().find({
+      where: { userId },
+    })
+    return accounts.reduce((acc, account) => acc + Number(account.balance), 0)
+  }
+
   async addBalance(userId: number, amount: number, scope?: BaseScope) {
     const account = await this.getOrCreateAccount(userId, scope)
     account.balance = Number(account.balance) + amount
