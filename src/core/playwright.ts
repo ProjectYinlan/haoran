@@ -269,7 +269,7 @@ export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOp
     meta: {
       botName: (configManager.config as any)?.bot?.name,
       generatedAt: new Date(),
-      devMode: typeof process !== 'undefined' && process.env?.NODE_ENV === 'development',
+      devMode: configManager.config.devMode ?? (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development'),
     },
   }))
   const devCssLink = tailwindDevServerUrl

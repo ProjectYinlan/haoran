@@ -34,7 +34,7 @@ export const StandResult = ({
   balance,
   totalVisits,
 }: StandResultData) => {
-  if (!avatarUrl || !nickname || !content || !totalScore || !totalCount || !othersScore || !othersCount || !friendsScore || !friends || !balance || !totalVisits) return null;
+  if (!friends) return null;
   return (
     <div className="flex flex-col gap-4 p-6 bg-white rounded-2xl border border-slate-200 text-slate-800">
       <div className="flex gap-3 items-center">

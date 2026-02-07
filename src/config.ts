@@ -6,9 +6,15 @@ import { createLogger } from './logger.js';
 const logger = createLogger('config');
 
 const configSchema = z.object({
+  devMode: z.boolean().optional(),
   bot: z.object({
     name: z.string().optional(),
     ignoreGroupPrivate: z.boolean().optional(),
+    groupAccess: z.object({
+      mode: z.enum(['blacklist', 'whitelist']).optional(),
+      blacklist: z.array(z.number()).optional(),
+      whitelist: z.array(z.number()).optional(),
+    }).optional(),
   }).optional(),
   ob: z.object({
     protocol: z.enum(['ws', 'wss']),

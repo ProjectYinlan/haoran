@@ -22,6 +22,21 @@ export async function connect() {
       if (configManager.config.bot?.ignoreGroupPrivate && message.message_type === 'private' && (message as any).sub_type === 'group') {
         return
       }
+      const groupAccess = configManager.config.bot?.groupAccess
+      const groupMode = groupAccess?.mode ?? 'blacklist'
+      const groupId = message.message_type === 'group'
+        ? message.group_id
+        : ((message as any).sub_type === 'group' ? (message as any).group_id : undefined)
+      if (groupId !== undefined) {
+        const blacklist = new Set(groupAccess?.blacklist ?? [])
+        const whitelist = new Set(groupAccess?.whitelist ?? [])
+        if (groupMode === 'blacklist' && blacklist.has(groupId)) {
+          return
+        }
+        if (groupMode === 'whitelist' && !whitelist.has(groupId)) {
+          return
+        }
+      }
 
       // 二次封装 message
       const enhancedMessage: EnhancedMessage = {

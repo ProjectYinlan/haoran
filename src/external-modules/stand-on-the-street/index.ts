@@ -21,6 +21,7 @@ import { join } from "path"
 import { externalModulesPath } from "../../utils/path.js"
 import { StandLogic } from "./templates/StandLogic.js"
 import { createLogger } from "../../logger.js"
+import { configManager } from "../../config.js"
 import { readFile } from "fs/promises"
 
 const randomRange = (min: number, max: number) => {
@@ -83,10 +84,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
   private logicContent = ''
 
   initialize() {
-    this.logger = createLogger('external-modules/' + this.moduleName)
     const logicFilePath = join(externalModulesPath, this.moduleName, 'docs', 'LOGIC_.md')
     readFile(logicFilePath, 'utf-8').then(content => {
       this.logicContent = content
+      this.logger.debug(`逻辑内容初始化完成`)
     }).catch(error => {
       this.logger.error('读取逻辑文件失败: ' + error)
     })
@@ -101,6 +102,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Args() args: string[],
     @Bot() bot: NCWebsocket,
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求普通站街, args: ${JSON.stringify(args)}`)
     const force = args.includes('--force') || args.includes('-f')
     await this.executeStand(message, bot, 'random', force)
   }
@@ -113,6 +115,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Message() message: EnhancedMessage,
     @Bot() bot: NCWebsocket,
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求强制站街`)
     await this.executeStand(message, bot, 'random', true)
   }
 
@@ -125,6 +128,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Bot() bot: NCWebsocket,
     @At() atList: number[],
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求点名站街, atList: ${JSON.stringify(atList)}`)
     await this.executeStand(message, bot, 'call', false, atList)
   }
 
@@ -136,8 +140,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Message() message: EnhancedMessage,
     @Bot() bot: NCWebsocket,
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 查询站街数据`)
     if (standConfig?.enabled === false) {
       await message.reply([Structs.text('站街模块未开启')])
+      this.logger.warn(`查询站街数据: 站街模块未开启`)
       return
     }
     if (message.message_type !== 'group') return
@@ -146,6 +152,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const record = await this.standService.getRecord(userId, groupId)
     if (!record || (record.into ?? []).length === 0) {
       await message.reply([Structs.text('您还没有站过街')])
+      this.logger.debug(`查询站街数据: 用户${userId} 没有站过街`)
       return
     }
 
@@ -163,6 +170,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       const groupInfo = await bot.get_group_info({ group_id: groupId })
       groupName = groupInfo.group_name
     } catch (error) {
+      this.logger.warn(`查询站街数据获取群名失败: ${error}`)
     }
 
     const avatarUrl = getQQAvatarUrl(userId, 100)
@@ -187,6 +195,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
         friendsCount: globalFriendsCount,
       }
     })
+    this.logger.debug(`用户${userId} 站街分组数据`)
     if (!info) return
 
     const image = await renderTemplate(
@@ -194,6 +203,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       { width: 400, height: 'auto', minHeight: 220 }
     )
     await message.reply([Structs.image(image)])
+    this.logger.debug(`用户${userId} 站街数据图片已生成并发送`)
   }
 
   @RegexCommand(/^(站街人气榜|站街赚钱榜|站街赔钱榜|站街贞洁榜|站街常客榜)$/, '查询站街排行榜')
@@ -204,6 +214,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Message() message: EnhancedMessage,
     @Bot() bot: NCWebsocket,
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求排行榜`)
     const content = message.message
       .filter(segment => segment.type === 'text')
       .map(segment => segment.data.text)
@@ -217,7 +228,11 @@ export default class StandOnTheStreetModule extends BaseCommand {
       '站街常客榜': 'bad_boi',
     }
     const type = map[content]
-    if (!type) return
+    if (!type) {
+      this.logger.warn(`排行榜请求类型未识别: [${content}]`)
+      return
+    }
+    this.logger.debug(`排行榜类型: ${type}`)
     await this.sendRank(message, bot, type)
   }
 
@@ -228,15 +243,17 @@ export default class StandOnTheStreetModule extends BaseCommand {
   async handleLogic(
     @Message() message: EnhancedMessage,
   ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求查看站街逻辑`)
     if (!this.logicContent) {
       await message.reply([Structs.text('内部错误，请联系管理员')])
+      this.logger.warn(`逻辑查看失败，内容未加载`)
       return
     }
     const logic = StandLogic({ content: this.logicContent })
     if (!logic) return
     const image = await renderTemplate(logic, { width: 400, height: 'auto' })
     await message.reply([Structs.image(image)])
-
+    this.logger.debug(`逻辑图片已生成并发送`)
   }
 
   private getRecentAvg(record: StandRecord) {
@@ -267,10 +284,15 @@ export default class StandOnTheStreetModule extends BaseCommand {
     })
     const total = sumBy(weights, weight => weight)
     let roll = Math.random() * total
+    this.logger.debug(`rollWeightedStep: stepCount=${stepCount}, weights=${JSON.stringify(weights)}, total=${total}, roll初始=${roll}`)
     for (let i = 0; i < weights.length; i += 1) {
       roll -= weights[i]
-      if (roll <= 0) return i
+      if (roll <= 0) {
+        this.logger.debug(`rollWeightedStep 命中 index=${i}`)
+        return i
+      }
     }
+    this.logger.debug(`rollWeightedStep 命中末尾 index=${stepCount - 1}`)
     return stepCount - 1
   }
 
@@ -280,8 +302,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
     ts: number,
     force: boolean,
   ) {
-    const devMode = standConfig?.devMode === true
+    const devMode = configManager.config.devMode === true
     if (!devMode && record.nextTime && record.nextTime.getTime() > ts) {
+      this.logger.debug(`CD中 nextTime=${formatTs(record.nextTime)} ts=${ts} force=${force}`)
       if (!force) {
         const nextTime = formatTs(record.nextTime)
         await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n下次时间为：${nextTime}`)])
@@ -295,8 +318,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }
 
     if (record.nextTime && record.nextTime.getTime() <= ts) {
+      this.logger.debug(`CD已到 nextTime=${formatTs(record.nextTime)} ts=${ts}，force复位`)
       return { canProceed: true, force: false }
     }
+    this.logger.debug(`CD通过，可站街 force=${force}`)
     return { canProceed: true, force }
   }
 
@@ -308,6 +333,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
       canForce = Math.random() < 0.3
       if (canForce) {
         msgContent += '\n恭喜您，获得杨威Buff，站街CD加18小时'
+        this.logger.debug(`强制站街获得Buff`)
+      } else {
+        this.logger.debug(`强制站街未获得Buff`)
       }
     }
     return { canForce, msgContent }
@@ -322,15 +350,18 @@ export default class StandOnTheStreetModule extends BaseCommand {
     scope: BaseScope,
     basePayWeight: number,
     highPayBaseWeight: number,
+    allowEmpty: boolean,
   ): Promise<StandOutcome> {
+    this.logger.debug(`生成随机站街收益 groupId=${groupId} userId=${userId}`)
     const members = await bot.get_group_member_list({ group_id: groupId })
+    this.logger.debug(`群成员 userIds: ${JSON.stringify(members.map(m => m.user_id))}`)
     const memberIds = members.map(m => m.user_id)
     // 随机生成本次“群友/路人”数量上限
     const totalCountMax = randomRange(0, 30)
     const friendsCountMax = memberIds.length >= 20 ? 19 : Math.max(memberIds.length - 1, 0)
     let friendsCount = friendsCountMax > 0 ? randomRange(0, friendsCountMax) : 0
     const othersCountMax = friendsCount > totalCountMax ? 0 : totalCountMax - friendsCount
-    const othersCount = othersCountMax > 0 ? randomRange(0, othersCountMax) : 0
+    let othersCount = othersCountMax > 0 ? randomRange(0, othersCountMax) : 0
 
     // 过滤候选人：有余额且当天被榨少于 2 次
     const candidateIds = memberIds.filter(id => id !== userId)
@@ -345,6 +376,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }).map(item => Number(item.userId))
 
     friendsCount = Math.min(friendsCount, candidates.length)
+    if (!allowEmpty && friendsCount + othersCount === 0) {
+      othersCount = 1
+      this.logger.debug(`最近 3 次已出现无人光顾，本次强制至少 1 人次`)
+    }
     const candidateBalances = candidates.map(id => balances.get(id) ?? 0)
     const maxBalance = Math.max(...candidateBalances, 1)
     // 余额越多权重越高
@@ -352,7 +387,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
       const normalized = clamp(balance / maxBalance, 0, 1)
       return 1 + normalized * 4
     })
+    this.logger.debug(`参与候选人: ${JSON.stringify(candidates)} 权重: ${JSON.stringify(weights)} 拟抽取${friendsCount}人`)
     const picked = pickWeightedUnique(candidates, weights, friendsCount)
+    this.logger.debug(`被抽中好友: ${JSON.stringify(picked)}`)
     const friends: StandFriend[] = []
     let friendsScore = 0
     const outList: Array<{ targetUserId: number, score: number }> = []
@@ -368,6 +405,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     picked.forEach(friendId => {
       // 群友收益按随机分段计算
       const score = rollScore(6)
+      this.logger.debug(`好友${friendId} 收益: ${score}`)
       friendsScore += score
       friends.push({ qq: friendId, score })
       outList.push({ targetUserId: friendId, score })
@@ -376,9 +414,12 @@ export default class StandOnTheStreetModule extends BaseCommand {
     let othersScore = 0
     for (let i = 0; i < othersCount; i += 1) {
       // 路人每人次独立计算付款金额
-      othersScore += rollScore(5)
+      const s = rollScore(5)
+      this.logger.debug(`路人第${i}次 收益: ${s}`)
+      othersScore += s
     }
 
+    this.logger.debug(`随机站街结果: friendsScore=${friendsScore} othersScore=${othersScore} friends=${JSON.stringify(friends)} othersCount=${othersCount}`)
     return {
       intoDetail: {
         ts,
@@ -403,35 +444,42 @@ export default class StandOnTheStreetModule extends BaseCommand {
     basePayWeight: number,
     highPayBaseWeight: number,
   ): Promise<StandOutcome | null> {
+    this.logger.debug(`点名站街 groupId=${groupId} atList=${JSON.stringify(atList)} userId=${message.sender.user_id}`)
     if (atList.length === 0) {
       await message.reply([Structs.text('您没有选择摇人对象。')])
+      this.logger.warn(`点名失败: 未选择对象`)
       return null
     }
     if (atList.length > 1) {
       await message.reply([Structs.text('一次只能光临一人哦。')])
+      this.logger.warn(`点名失败: 同时光临多人`)
       return null
     }
     const targetId = atList[0]
     const targetRecord = await this.standService.getRecord(targetId, groupId)
     if (!targetRecord) {
       await message.reply([Structs.text('他还没站过街。')])
+      this.logger.warn(`点名失败: 目标用户${targetId}无记录`)
       return null
     }
     const targetBalanceMap = await this.vaultService.getBalancesByUserIds([targetId], scope)
     const targetBalance = targetBalanceMap.get(targetId) ?? 0
     if (targetBalance <= 0) {
       await message.reply([Structs.text('他已经没钱了。')])
+      this.logger.warn(`点名失败: 目标用户${targetId}余额不足`)
       return null
     }
     const dayOut = (targetRecord.out ?? []).filter((item: any) => item.ts && item.ts >= dayTs).length
     if (dayOut >= 2) {
       await message.reply([Structs.text(`他今天已经被榨${dayOut}次了，牛牛已经累了`)])
+      this.logger.warn(`点名失败: 目标用户${targetId} 今日已被榨 ${dayOut}`)
       return null
     }
 
     // 点名模式收益按随机分段计算
     const step = this.rollWeightedStep(12, basePayWeight, highPayBaseWeight)
     const score = step * 50
+    this.logger.debug(`点名模式 targetId=${targetId} step=${step} score=${score}`)
     return {
       outList: [{ targetUserId: targetId, score }],
       intoDetail: {
@@ -450,8 +498,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     force: boolean,
     atList: number[] = [],
   ) {
+    this.logger.debug(`执行站街 type=${type} userId=${message.sender.user_id} force=${force} atList=${JSON.stringify(atList)}`)
     if (standConfig?.enabled === false) {
       await message.reply([Structs.text('站街模块未开启')])
+      this.logger.warn(`执行站街: 站街模块未开启`)
       return
     }
     if (message.message_type !== 'group') return
@@ -464,9 +514,19 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const dayTs = getDayStart(now).getTime()
 
     const record = await this.standService.getOrCreateRecord(userId, groupId)
+    this.logger.debug(`当前用户历史状态: ${JSON.stringify({
+      score: record.score,
+      countFriends: record.countFriends,
+      countOthers: record.countOthers,
+      statsInto: record.statsInto,
+      cd: record.nextTime ? formatTs(record.nextTime) : null
+    })}`)
 
     const cooldownResult = await this.resolveCooldown(message, record, ts, force)
-    if (!cooldownResult.canProceed) return
+    if (!cooldownResult.canProceed) {
+      this.logger.debug(`站街中断: CD未到或不可强制`)
+      return
+    }
     force = cooldownResult.force
 
     let msgContent = ''
@@ -478,6 +538,13 @@ export default class StandOnTheStreetModule extends BaseCommand {
 
     // 近 5 次平均收益
     const recentAvg = this.getRecentAvg(record)
+    const recentInto = (record.into ?? []).slice(-3)
+    const recentEmptyCount = recentInto.filter(item => {
+      const friendsCount = Array.isArray(item?.friends) ? item.friends.length : 0
+      const othersCount = Number(item?.others?.count) || 0
+      return friendsCount + othersCount === 0
+    }).length
+    const allowEmpty = recentEmptyCount < 1
     // 近 5 次站街人均金额与低收入补偿权重
     const recentPerCapitaAvg = this.getRecentPerCapitaAvg(record)
     const lowAvgBoost = recentPerCapitaAvg < 100
@@ -504,6 +571,8 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const canForce = forceState.canForce
     msgContent += forceState.msgContent
 
+    this.logger.debug(`权重计算: recentAvg=${recentAvg}, recentPerCapitaAvg=${recentPerCapitaAvg}, lowAvgBoost=${lowAvgBoost}, basePayWeight=${basePayWeight}, highPayBaseWeight=${highPayBaseWeight}`)
+
     let outcome: StandOutcome | null = null
 
     if (type === 'random') {
@@ -516,6 +585,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
         scope,
         basePayWeight,
         highPayBaseWeight,
+        allowEmpty,
       )
     } else {
       outcome = await this.buildCallOutcome(
@@ -529,7 +599,11 @@ export default class StandOnTheStreetModule extends BaseCommand {
         highPayBaseWeight,
       )
     }
-    if (!outcome) return
+
+    if (!outcome) {
+      this.logger.debug(`没有可用 outcome，站街终止。`)
+      return
+    }
     const { intoDetail, outList } = outcome
 
     // 平均收益与文案选择
@@ -538,6 +612,8 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const content = (per === 0 || Number.isNaN(per))
       ? randomArrayElem(standTexts.succeed.none)
       : randomArrayElem(standTexts.succeed.normal)
+
+    this.logger.debug(`站街收益 outcome: ${JSON.stringify(intoDetail)}, outList=${JSON.stringify(outList)} totalPer=${per}`)
 
     let incomeAccountBalance = latestBalance
     await getDataSource().transaction(async manager => {
@@ -565,6 +641,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
             notify: null,
           })
           targetRecord = await recordRepo.save(targetRecord)
+          this.logger.debug(`初始化目标记录 userId=${targetUserId} groupId=${groupId}`)
         }
         return targetRecord
       }
@@ -594,6 +671,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
             sourceType: 'stand_rich_fee',
             targetType: 'stand',
           }))
+          this.logger.debug(`用户${userId} 扣除富豪手续费 ${richCommission}, 新余额${latestBalance}`)
+        } else {
+          this.logger.warn(`用户${userId} 扣除富豪手续费失败`)
         }
         msgContent += `\n已扣除富豪手续费 ${richCommission}，余额为 ${latestBalance}`
       }
@@ -623,6 +703,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
             sourceType: 'stand_force_fee',
             targetType: 'stand',
           }))
+          this.logger.debug(`用户${userId} 扣除强制手续费 ${forceCommission}, 新余额${latestBalance}`)
+        } else {
+          this.logger.warn(`用户${userId} 扣除强制手续费失败`)
         }
         msgContent += `\n已扣除强制站街手续费 ${forceCommission}，余额为 ${latestBalance}`
       }
@@ -632,11 +715,12 @@ export default class StandOnTheStreetModule extends BaseCommand {
       record.countOthers += intoDetail.others.count
       record.statsInto = Number(record.statsInto) + intoDetail.score
       record.into = [...(record.into ?? []), intoDetail]
-      record.nextTime = standConfig?.devMode === true
+      record.nextTime = configManager.config.devMode === true
         ? null
         : new Date(ts + cooldownHours * 60 * 60 * 1000 + (canForce ? forceExtraHours * 60 * 60 * 1000 : 0))
       record.force = canForce
       await recordRepo.save(record)
+      this.logger.debug(`站街记录已更新 userId=${userId} groupId=${groupId}`)
 
       if (intoDetail.score !== 0) {
         const merchantOrderId = randomUUID()
@@ -662,6 +746,9 @@ export default class StandOnTheStreetModule extends BaseCommand {
             sourceType: type === 'random' ? 'stand_random_income' : 'stand_call_income',
             targetType: 'user',
           }))
+          this.logger.debug(`用户${userId} 获得收入 ${intoDetail.score}，新余额${incomeAccountBalance}`)
+        } else {
+          this.logger.warn(`用户${userId} 收入到账失败`)
         }
       }
 
@@ -672,6 +759,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
         targetRecord.statsOut = Number(targetRecord.statsOut) + item.score
         targetRecord.out = [...(targetRecord.out ?? []), { qq: userId, score: item.score, ts }]
         await recordRepo.save(targetRecord)
+        this.logger.debug(`用户${targetId} 站街支出扣除: ${item.score}`)
 
         const merchantOrderId = randomUUID()
         const billResult = await this.vaultService.applyBill({
@@ -696,12 +784,15 @@ export default class StandOnTheStreetModule extends BaseCommand {
             sourceType: 'user',
             targetType: 'stand_expense',
           }))
+          this.logger.debug(`用户${targetId} 扣款成功 ${item.score}`)
+        } else {
+          this.logger.warn(`用户${targetId} 扣款失败`)
         }
       }
     })
 
     const friendsList = Array.isArray(intoDetail.friends) ? intoDetail.friends : []
-    const result = StandResult({
+    const standResultData = {
       avatarUrl: getQQAvatarUrl(userId, 100),
       nickname: message.sender.card || message.sender.nickname || String(userId),
       content: `${content}${msgContent}`,
@@ -717,15 +808,22 @@ export default class StandOnTheStreetModule extends BaseCommand {
       })),
       balance: incomeAccountBalance,
       totalVisits: record.countFriends + record.countOthers,
-    })
-    if (!result) return
+    }
+    const result = StandResult(standResultData)
+    if (!result) {
+      this.logger.warn(`StandResult 渲染失败, 渲染 data: ${JSON.stringify(standResultData)}`)
+      return
+    }
     const image = await renderTemplate(result, { width: 400, height: 'auto', minHeight: 260 })
     await message.reply([Structs.image(image)])
+    this.logger.debug(`站街结果已生成图片并发送 userId=${userId} totalScore=${intoDetail.score}`)
   }
 
   private async sendRank(message: EnhancedMessage, bot: NCWebsocket, type: StandRankType) {
+    this.logger.debug(`查询排行榜 type=${type}`)
     if (standConfig?.enabled === false) {
       await message.reply([Structs.text('站街模块未开启')])
+      this.logger.warn(`查询排行榜: 站街模块未开启`)
       return
     }
     if (message.message_type !== 'group') return
@@ -736,6 +834,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
         groupId,
       }
     })
+    this.logger.debug(`排行榜当前记录数: ${records.length}`)
     const items = records.map(record => {
       const totalCount = record.countFriends + record.countOthers
       let number = 0
@@ -766,6 +865,8 @@ export default class StandOnTheStreetModule extends BaseCommand {
       })
       .slice(0, 5)
 
+    this.logger.debug(`排行榜前5: ${JSON.stringify(sorted)}`)
+
     const members = await bot.get_group_member_list({ group_id: groupId })
     const memberMap = new Map(members.map(member => [member.user_id, member.card || member.nickname || String(member.user_id)]))
 
@@ -783,6 +884,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       const groupInfo = await bot.get_group_info({ group_id: groupId })
       groupName = groupInfo.group_name
     } catch (error) {
+      this.logger.warn(`查询排行榜获取群名失败: ${error}`)
     }
 
     const rank = StandRank({
@@ -794,12 +896,16 @@ export default class StandOnTheStreetModule extends BaseCommand {
       items: itemsWithMeta,
     })
 
-    if (!rank) return
+    if (!rank) {
+      this.logger.warn(`排行榜模板渲染失败`)
+      return
+    }
 
     const image = await renderTemplate(
       rank,
       { width: 400, height: 'auto', minHeight: 260 }
     )
     await message.reply([Structs.image(image)])
+    this.logger.debug(`群${groupId} 排行榜图片生成并发送 type=${type}`)
   }
 }
