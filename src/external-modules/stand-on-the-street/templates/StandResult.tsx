@@ -6,6 +6,8 @@ export type StandFriendItem = {
 
 import { Wallet, Users } from 'lucide-react'
 import { getShortNumberString } from '../../../utils/index.js'
+import { isUndefined } from 'lodash-es'
+import { Tag } from '../../../core/components/Tag.js'
 
 export type StandResultData = {
   avatarUrl: string
@@ -19,6 +21,7 @@ export type StandResultData = {
   friends: StandFriendItem[]
   balance: number
   totalVisits: number
+  round?: number
 }
 
 export const StandResult = ({
@@ -33,16 +36,18 @@ export const StandResult = ({
   friends = [],
   balance,
   totalVisits,
+  round,
 }: StandResultData) => {
-  if (!friends) return null;
+  if (!friends || isUndefined(totalScore) || isUndefined(totalCount) || isUndefined(othersScore) || isUndefined(othersCount) || isUndefined(friendsScore) || isUndefined(balance) || isUndefined(totalVisits)) return null;
   return (
     <div className="flex flex-col gap-4 p-6 bg-white rounded-2xl border border-slate-200 text-slate-800">
       <div className="flex gap-3 items-center">
         <img src={avatarUrl} className="w-10 h-10 rounded-full object-cover" />
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1">
           <span className="text-base font-semibold">{nickname}</span>
-          <span className="text-sm text-slate-500 whitespace-pre-wrap">{content}</span>
+          {content && <span className="text-sm text-slate-500 whitespace-pre-wrap">{content}</span>}
         </div>
+        {round && <div className='flex gap-1 items-center'>连续 <Tag>{round}</Tag> 次</div>}
       </div>
 
       <div className="rounded-xl border border-slate-200 p-4 flex flex-col gap-3 bg-slate-50">
@@ -105,6 +110,7 @@ export const preview = {
     ],
     balance: 12345,
     totalVisits: 42,
+    round: 4
   } satisfies StandResultData,
   size: { width: 400, height: 'auto' as const },
 }

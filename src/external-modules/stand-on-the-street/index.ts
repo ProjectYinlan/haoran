@@ -119,6 +119,18 @@ export default class StandOnTheStreetModule extends BaseCommand {
     await this.executeStand(message, bot, 'random', true)
   }
 
+  @NoPrefixCommand('连续站街', '连续站街直到进入 CD')
+  @Usage('连续站街')
+  @Permission('stand-on-the-street.work')
+  @GroupOnly('该命令仅限群聊使用')
+  async handleContinuous(
+    @Message() message: EnhancedMessage,
+    @Bot() bot: NCWebsocket,
+  ) {
+    this.logger.debug(`用户${message.sender.user_id} 请求连续站街`)
+    await this.executeStandContinuous(message, bot)
+  }
+
   @RegexCommand(/^(炒|超|操)(\s+|$)/, '进行点名站街')
   @Usage('操 @对方')
   @Permission('stand-on-the-street.call')
@@ -301,18 +313,23 @@ export default class StandOnTheStreetModule extends BaseCommand {
     record: StandRecord,
     ts: number,
     force: boolean,
+    silent = false,
   ) {
     const devMode = configManager.config.devMode === true
     if (!devMode && record.nextTime && record.nextTime.getTime() > ts) {
       this.logger.debug(`CD中 nextTime=${formatTs(record.nextTime)} ts=${ts} force=${force}`)
       if (!force) {
-        const nextTime = formatTs(record.nextTime)
-        await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n下次时间为：${nextTime}`)])
+        if (!silent) {
+          const nextTime = formatTs(record.nextTime)
+          await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n下次时间为：${nextTime}`)])
+        }
         return { canProceed: false, force }
       }
       if (record.force) {
-        const nextTime = formatTs(record.nextTime)
-        await message.reply([Structs.text(`${randomArrayElem(standTexts.tooMany)}\n请在下次时间到达后使用普通站街\n下次时间为：${nextTime}`)])
+        if (!silent) {
+          const nextTime = formatTs(record.nextTime)
+          await message.reply([Structs.text(`${randomArrayElem(standTexts.tooMany)}\n请在下次时间到达后使用普通站街\n下次时间为：${nextTime}`)])
+        }
         return { canProceed: false, force }
       }
     }
@@ -498,6 +515,26 @@ export default class StandOnTheStreetModule extends BaseCommand {
     force: boolean,
     atList: number[] = [],
   ) {
+    const result = await this.executeStandOnce(message, bot, type, force, atList, false)
+    if (!result) return
+    const resultEl = StandResult(result.standResultData)
+    if (!resultEl) {
+      this.logger.warn(`StandResult 渲染失败, 渲染 data: ${JSON.stringify(result.standResultData)}`)
+      return
+    }
+    const image = await renderTemplate(resultEl, { width: 400, height: 'auto', minHeight: 260 })
+    await message.reply([Structs.image(image)])
+    this.logger.debug(`站街结果已生成图片并发送 userId=${message.sender.user_id} totalScore=${result.standResultData.totalScore}`)
+  }
+
+  private async executeStandOnce(
+    message: EnhancedMessage,
+    bot: NCWebsocket,
+    type: StandMode,
+    force: boolean,
+    atList: number[] = [],
+    silentCooldown = false,
+  ) {
     this.logger.debug(`执行站街 type=${type} userId=${message.sender.user_id} force=${force} atList=${JSON.stringify(atList)}`)
     if (standConfig?.enabled === false) {
       await message.reply([Structs.text('站街模块未开启')])
@@ -522,7 +559,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       cd: record.nextTime ? formatTs(record.nextTime) : null
     })}`)
 
-    const cooldownResult = await this.resolveCooldown(message, record, ts, force)
+    const cooldownResult = await this.resolveCooldown(message, record, ts, force, silentCooldown)
     if (!cooldownResult.canProceed) {
       this.logger.debug(`站街中断: CD未到或不可强制`)
       return
@@ -606,16 +643,13 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }
     const { intoDetail, outList } = outcome
 
-    // 平均收益与文案选择
     const totalCount = intoDetail.others.count + outList.length
     const per = totalCount > 0 ? Math.ceil(intoDetail.score / totalCount) : 0
-    const content = (per === 0 || Number.isNaN(per))
-      ? randomArrayElem(standTexts.succeed.none)
-      : randomArrayElem(standTexts.succeed.normal)
-
     this.logger.debug(`站街收益 outcome: ${JSON.stringify(intoDetail)}, outList=${JSON.stringify(outList)} totalPer=${per}`)
 
     let incomeAccountBalance = latestBalance
+    let richCommissionApplied = 0
+    let forceCommissionApplied = 0
     await getDataSource().transaction(async manager => {
       const recordRepo = manager.getRepository(StandRecord)
       const merchantRepo = manager.getRepository(StandMerchantOrder)
@@ -661,6 +695,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
           manager,
         })
         if (billResult.ok) {
+          richCommissionApplied = richCommission
           latestBalance = Number(billResult.account.balance)
           await merchantRepo.save(merchantRepo.create({
             orderId: merchantOrderId,
@@ -693,6 +728,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
           manager,
         })
         if (billResult.ok) {
+          forceCommissionApplied = forceCommission
           latestBalance = Number(billResult.account.balance)
           await merchantRepo.save(merchantRepo.create({
             orderId: merchantOrderId,
@@ -792,10 +828,14 @@ export default class StandOnTheStreetModule extends BaseCommand {
     })
 
     const friendsList = Array.isArray(intoDetail.friends) ? intoDetail.friends : []
+    const feeSummaryParts = []
+    if (richCommissionApplied > 0) feeSummaryParts.push(`富豪手续费 ${richCommissionApplied}`)
+    if (forceCommissionApplied > 0) feeSummaryParts.push(`强制手续费 ${forceCommissionApplied}`)
+    const feeSummary = feeSummaryParts.join('，')
     const standResultData = {
       avatarUrl: getQQAvatarUrl(userId, 100),
       nickname: message.sender.card || message.sender.nickname || String(userId),
-      content: `${content}${msgContent}`,
+      content: feeSummary,
       totalScore: intoDetail.score,
       totalCount,
       othersScore: intoDetail.others.score,
@@ -809,14 +849,78 @@ export default class StandOnTheStreetModule extends BaseCommand {
       balance: incomeAccountBalance,
       totalVisits: record.countFriends + record.countOthers,
     }
-    const result = StandResult(standResultData)
-    if (!result) {
-      this.logger.warn(`StandResult 渲染失败, 渲染 data: ${JSON.stringify(standResultData)}`)
+    return {
+      standResultData,
+      totalCount,
+      record,
+      richCommission: richCommissionApplied,
+      forceCommission: forceCommissionApplied,
+    }
+  }
+
+  private async executeStandContinuous(
+    message: EnhancedMessage,
+    bot: NCWebsocket,
+  ) {
+    const first = await this.executeStandOnce(message, bot, 'random', false, [], false)
+    if (!first) return
+
+    let round = 1
+    let latestRecord = first.record
+    let latestBalance = first.standResultData.balance
+    let totalScore = first.standResultData.totalScore
+    let totalCount = first.standResultData.totalCount
+    let othersScore = first.standResultData.othersScore
+    let othersCount = first.standResultData.othersCount
+    let friendsScore = first.standResultData.friendsScore
+    let friends = [...first.standResultData.friends]
+    let totalRichCommission = first.richCommission
+    let totalForceCommission = first.forceCommission
+
+    while (round < 10) {
+      const next = await this.executeStandOnce(message, bot, 'random', true, [], true)
+      if (!next) break
+      round += 1
+      latestRecord = next.record
+      latestBalance = next.standResultData.balance
+      totalScore += next.standResultData.totalScore
+      totalCount += next.standResultData.totalCount
+      othersScore += next.standResultData.othersScore
+      othersCount += next.standResultData.othersCount
+      friendsScore += next.standResultData.friendsScore
+      friends = friends.concat(next.standResultData.friends)
+      totalRichCommission += next.richCommission
+      totalForceCommission += next.forceCommission
+    }
+    if (round >= 10) {
+      this.logger.debug(`连续站街达到最大轮次限制 round=${round}`)
+    }
+
+    const feeSummaryParts = []
+    if (totalRichCommission > 0) feeSummaryParts.push(`富豪手续费 ${totalRichCommission}`)
+    if (totalForceCommission > 0) feeSummaryParts.push(`强制手续费 ${totalForceCommission}`)
+    const mergedContent = feeSummaryParts.join('，')
+    const mergedResultData = {
+      ...first.standResultData,
+      content: mergedContent,
+      totalScore,
+      totalCount,
+      othersScore,
+      othersCount,
+      friendsScore,
+      friends,
+      balance: latestBalance,
+      totalVisits: latestRecord.countFriends + latestRecord.countOthers,
+      round,
+    }
+    const resultEl = StandResult(mergedResultData)
+    if (!resultEl) {
+      this.logger.warn(`StandResult 渲染失败, 渲染 data: ${JSON.stringify(mergedResultData)}`)
       return
     }
-    const image = await renderTemplate(result, { width: 400, height: 'auto', minHeight: 260 })
+    const image = await renderTemplate(resultEl, { width: 400, height: 'auto', minHeight: 260 })
     await message.reply([Structs.image(image)])
-    this.logger.debug(`站街结果已生成图片并发送 userId=${userId} totalScore=${intoDetail.score}`)
+    this.logger.debug(`连续站街结果已生成图片并发送 userId=${message.sender.user_id} round=${round} totalScore=${totalScore}`)
   }
 
   private async sendRank(message: EnhancedMessage, bot: NCWebsocket, type: StandRankType) {
