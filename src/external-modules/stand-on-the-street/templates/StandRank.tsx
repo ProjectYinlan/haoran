@@ -1,5 +1,5 @@
 import { Tag } from "../../../core/components/Tag"
-import { getMaskString, getShortNumberString } from "../../../utils"
+import { getMaskString, getShortNumberString } from "../../../utils/index.js"
 
 export type StandRankItem = {
   userId: number

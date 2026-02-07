@@ -5,7 +5,7 @@ export type StandFriendItem = {
 }
 
 import { Wallet, Users } from 'lucide-react'
-import { getShortNumberString } from '../../../utils'
+import { getShortNumberString } from '../../../utils/index.js'
 
 export type StandResultData = {
   avatarUrl: string
