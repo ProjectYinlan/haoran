@@ -3,6 +3,7 @@ import { In } from 'typeorm'
 import { getDataSource } from '../../core/database.js'
 import StandRecord from './entities/StandRecord.js'
 import StandMerchantOrder from './entities/StandMerchantOrder.js'
+import { BaseScope, BaseScopeType } from '../../typings/Command.js'
 
 export class StandService {
   private static instance?: StandService
@@ -29,6 +30,24 @@ export class StandService {
       where: {
         userId,
         groupId,
+      }
+    })
+  }
+
+  async getRecordsByScope(userId: number, scope: BaseScope) {
+    const repo = this.getRecordRepositoryImpl()
+    if (scope.type === BaseScopeType.GROUP) {
+      const record = await repo.findOne({
+        where: {
+          userId,
+          groupId: scope.groupId,
+        }
+      })
+      return record ? [record] : []
+    }
+    return await repo.find({
+      where: {
+        userId,
       }
     })
   }

@@ -41,12 +41,12 @@ export const standRankMeta = {
     title: ['赔钱货！'],
   },
   good_boi: {
-    name: '站街乖宝宝榜',
+    name: '站街贞洁榜',
     unit: '次',
     title: ['贞洁永存'],
   },
   bad_boi: {
-    name: '站街坏宝宝榜',
+    name: '站街常客榜',
     unit: '次',
     title: ['可能是*牛'],
   },

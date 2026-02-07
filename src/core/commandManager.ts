@@ -18,8 +18,9 @@ type CommandInfo = {
   name: string
   description: string
   moduleName: string
-  usage?: string
+  usage?: string | string[]
   examples?: string[]
+  aliases?: string[]
   isSubCommand?: boolean
   parentCommand?: string
   subCommandPath?: string[]
@@ -50,6 +51,19 @@ export class CommandManager {
     return Array.from(this.commands.values())
   }
 
+  private findCommandByName(name: string) {
+    const direct = this.commands.get(name)
+    if (direct) return direct
+    const trimmed = name.trim()
+    if (!trimmed) return undefined
+    for (const command of this.commands.values()) {
+      if (command.aliases && command.aliases.includes(trimmed)) {
+        return command
+      }
+    }
+    return undefined
+  }
+
   getModules() {
     const modules = new Map<string, { name: string, description?: string }>()
     for (const command of this.getCommandList()) {
@@ -73,7 +87,7 @@ export class CommandManager {
   }
 
   getCommandByName(name: string) {
-    return this.commands.get(name)
+    return this.findCommandByName(name)
   }
 
   registerModule(module: BaseCommand) {
@@ -91,6 +105,21 @@ export class CommandManager {
         const commandOptions = getCommandOptions(module, command.propertyKey)
         logger.debug(`注册命令: ${fullName}`)
         const permission = moduleClass.permissions?.get(command.propertyKey) || ''
+        const normalizeAliases = (aliases?: string[]) => {
+          if (!aliases || aliases.length === 0) return []
+          return aliases
+            .map(item => item.trim())
+            .filter(Boolean)
+            .map(item => {
+              const stripped = item.startsWith('.') ? item.slice(1) : item
+              if (isSubCommand) {
+                if (stripped.startsWith(`${moduleName} `) || stripped === moduleName) return stripped
+                return `${moduleName} ${stripped}`.trim()
+              }
+              return stripped
+            })
+        }
+        const aliases = normalizeAliases(command.aliases)
         this.commands.set(fullName, {
           handler: command.handler.bind(module),
           permission,
@@ -99,6 +128,7 @@ export class CommandManager {
           moduleName,
           usage: command.usage,
           examples: command.examples,
+          aliases,
           isSubCommand,
           parentCommand: isSubCommand ? moduleName : undefined,
           subCommandPath: isSubCommand ? subPath : undefined,
@@ -117,7 +147,7 @@ export class CommandManager {
     const parts = [command, ...args]
     for (let i = parts.length; i >= 1; i -= 1) {
       const name = parts.slice(0, i).join(' ')
-      const cmd = this.commands.get(name)
+      const cmd = this.findCommandByName(name)
       if (cmd) {
         if (cmd.noPrefix || cmd.regex) {
           continue
@@ -130,17 +160,19 @@ export class CommandManager {
 
   private matchNoPrefixCommand(content: string) {
     const trimmed = content.trim()
-    const candidates = Array.from(this.commands.values())
-      .filter(cmd => cmd.noPrefix)
-      .sort((a, b) => b.name.length - a.name.length)
-    for (const cmd of candidates) {
-      if (trimmed === cmd.name) {
-        return { cmd, remainingArgs: [] as string[] }
+    const candidates = Array.from(this.commands.values()).filter(cmd => cmd.noPrefix)
+    const matchTargets = candidates.flatMap((cmd) => {
+      const names = [cmd.name, ...(cmd.aliases ?? [])]
+      return names.map(name => ({ cmd, name }))
+    }).sort((a, b) => b.name.length - a.name.length)
+    for (const target of matchTargets) {
+      if (trimmed === target.name) {
+        return { cmd: target.cmd, remainingArgs: [] as string[] }
       }
-      if (trimmed.startsWith(`${cmd.name} `)) {
-        const remaining = trimmed.slice(cmd.name.length).trim()
+      if (trimmed.startsWith(`${target.name} `)) {
+        const remaining = trimmed.slice(target.name.length).trim()
         const args = remaining.length ? remaining.split(' ') : []
-        return { cmd, remainingArgs: args }
+        return { cmd: target.cmd, remainingArgs: args }
       }
     }
     return null

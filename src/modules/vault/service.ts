@@ -176,12 +176,5 @@ export class VaultService {
       return `${index + 1}. ${time} ${sign}${Math.abs(Number(bill.change))} ${bill.description}`
     })
   }
-
-  logBills(bills: VaultBill[]) {
-    const lines = this.formatBillsForPrint(bills)
-    for (const line of lines) {
-      this.logger.info(line)
-    }
-  }
 }
 

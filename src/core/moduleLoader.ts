@@ -43,6 +43,7 @@ export class ModuleLoader {
     try {
       // 加载内置模块
       const internalModules = await this.loadModulesFromPath(this.modulesPath)
+      logger.info(`内部模块 ${internalModules.length} 个`)
       for (const module of internalModules) {
         logger.info('加载内部模块: ' + module.moduleName || 'unknown')
         this.commandManager.registerModule(module)
@@ -51,6 +52,7 @@ export class ModuleLoader {
 
       // 加载外部模块
       const externalModules = await this.loadModulesFromPath(this.externalModulesPath)
+      logger.info(`外部模块 ${externalModules.length} 个`)
       for (const module of externalModules) {
         logger.info('加载外部模块: ' + module.moduleName || 'unknown')
         this.commandManager.registerModule(module)

@@ -1,12 +1,15 @@
 import { Tag } from '../../../core/components/Tag.js'
 import { CodeBlock } from '../../../core/components/CodeBlock.js'
+import classNames from 'classnames'
 
 export type HelpCommandItem = {
   name: string
   description?: string
-  usage?: string
+  usage?: string | string[]
   examples?: string[]
   matchers?: string[]
+  aliases?: string[]
+  isRegex?: boolean
   isSubCommand?: boolean
   parentCommand?: string
   subCommandPath?: string[]
@@ -21,10 +24,12 @@ export type HelpData = {
   modules?: Array<{ name: string, description?: string }>
   commands?: HelpCommandItem[]
   description?: string
-  usage?: string
+  usage?: string | string[]
   examples?: string[]
   matchers?: string[]
+  aliases?: string[]
   footer?: string
+  isRegex?: boolean
   isSubCommand?: boolean
   parentCommand?: string
   subCommandPath?: string[]
@@ -48,12 +53,38 @@ export const Help = ({
   usage,
   examples = [],
   matchers = [],
+  aliases = [],
   footer,
   isSubCommand,
   parentCommand,
   subCommandPath = [],
+  isRegex,
 }: HelpData) => {
+  const displayCommandName = isRegex ? '复杂指令，请查看用法' : commandName
+  const displayUsage = usage || '未提供'
+  const renderUsageBlocks = (value: string | string[]) => {
+    const items = Array.isArray(value) ? value : [value]
+    const normalized = items.length > 0 ? items : ['未提供']
+    return (
+      <div className="col-span-11 flex flex-wrap gap-1">
+        {normalized.map((item, index) => (
+          <CodeBlock color="primary" key={`usage-${index}`}>{item}</CodeBlock>
+        ))}
+      </div>
+    )
+  }
+  const renderAliasBlocks = (value: string[]) => {
+    if (!value || value.length === 0) return null
+    return (
+      <div className="col-span-11 flex flex-wrap gap-1">
+        {value.map((item, index) => (
+          <CodeBlock color="secondary" key={`alias-${index}`}>{item}</CodeBlock>
+        ))}
+      </div>
+    )
+  }
   const renderCommandLabel = (command: HelpCommandItem) => {
+    if (command.isRegex) return '复杂指令，请查看用法'
     if (command.isSubCommand && command.parentCommand && command.subCommandPath && command.subCommandPath.length > 0) {
       return `${command.parentCommand} ${command.subCommandPath.join(' ')}`
     }
@@ -93,7 +124,9 @@ export const Help = ({
           <SectionTitle>指令详情</SectionTitle>
           <div className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
             <div className="grid grid-cols-2 items-center gap-2 justify-between">
-              <span className="text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words">{commandName}</span>
+              <span className={classNames("text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words", {
+                "text-slate-500": isRegex,
+              })}>{displayCommandName}</span>
               <span className="text-xs text-slate-500 col-span-1 flex justify-end overflow-wrap-anywhere break-words">{description || '无描述'}</span>
             </div>
             <div className="grid grid-cols-12 gap-2 text-xs">
@@ -105,8 +138,14 @@ export const Help = ({
                   <CodeBlock color='secondary' block className="col-span-11">{subCommandPath.join(' ')}</CodeBlock>
                 </>
               )}
+              {aliases.length > 0 && (
+                <>
+                  <span className="text-slate-500 whitespace-nowrap col-span-1">别名</span>
+                  {renderAliasBlocks(aliases)}
+                </>
+              )}
               <span className="text-slate-500 whitespace-nowrap col-span-1">用法</span>
-              <CodeBlock color='primary' block className="col-span-11">{usage || '未提供'}</CodeBlock>
+              {renderUsageBlocks(displayUsage)}
               {examples.length > 0 && (
                 <>
                   <span className="text-slate-500 whitespace-nowrap col-span-1">示例</span>
@@ -117,7 +156,7 @@ export const Help = ({
                   </div>
                 </>
               )}
-              {matchers.length > 0 && (
+              {!isRegex && matchers.length > 0 && (
                 <>
                   <span className="text-slate-500 whitespace-nowrap col-span-1">匹配</span>
                   <div className="flex flex-wrap gap-1 col-span-11">
@@ -146,13 +185,21 @@ export const Help = ({
                   className="flex flex-col gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 pt-1"
                 >
                   <div className="grid grid-cols-2 items-center gap-2 justify-between">
-                    <span className="text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words">{renderCommandLabel(command)}</span>
+                    <span className={classNames("text-sm font-semibold col-span-1 overflow-wrap-anywhere break-words", {
+                      "text-slate-500": command.isRegex,
+                    })}>{renderCommandLabel(command)}</span>
                     <span className="text-xs text-slate-500 col-span-1 flex justify-end overflow-wrap-anywhere break-words">{command.description || '无描述'}</span>
                   </div>
                   <div className="grid grid-cols-12 gap-2 text-xs">
+                    {command.aliases && command.aliases.length > 0 && (
+                      <>
+                        <span className="text-slate-500 whitespace-nowrap col-span-1">别名</span>
+                        {renderAliasBlocks(command.aliases)}
+                      </>
+                    )}
                     <span className="text-slate-500 whitespace-nowrap col-span-1">用法</span>
-                    <CodeBlock color='primary' block className="col-span-11">{command.usage || '未提供'}</CodeBlock>
-                    {command.matchers && command.matchers.length > 0 && (
+                    {renderUsageBlocks(command.usage || '未提供')}
+                    {!command.isRegex && command.matchers && command.matchers.length > 0 && (
                       <>
                         <span className="text-slate-500 whitespace-nowrap col-span-1">匹配</span>
                         <div className="flex flex-wrap gap-1 col-span-11">

@@ -4,3 +4,6 @@
 @tailwind components;
 @tailwind utilities;
 
+code, kbd, samp, pre {
+  font-family: "MixedCodeFont", "JetBrains Mono", "monospace";
+}

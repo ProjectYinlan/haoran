@@ -111,7 +111,7 @@ export const Tag = ({
   }
 
   const className = classNames([
-    'inline-flex items-center justify-center whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium leading-none font-mono border',
+    'inline-flex items-center justify-center whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium leading-none font-mixed-code border',
     backgroundClass,
     textClass,
     borderClass,

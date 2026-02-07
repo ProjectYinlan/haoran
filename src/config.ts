@@ -76,7 +76,6 @@ const resolveConfigPath = () => {
 }
 
 export class ConfigManager {
-  private watchStarted = false
   private _config = this.loadConfigFromFile()
   private _modulesConfig = (this._config.modules ?? {}) as Record<string, any>
 

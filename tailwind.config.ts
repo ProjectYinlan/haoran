@@ -10,6 +10,7 @@ export default {
       fontFamily: {
         sans: ['HarmonyOS Sans SC', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        'mixed-code': ['MixedCodeFont', 'monospace'],
       },
       fontSize: {
         '2xs': ['10px', '12px'],

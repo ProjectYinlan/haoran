@@ -1,8 +1,8 @@
-import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Bot } from "../../core/decorators.js"
+import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Bot, SubCommand, Alias } from "../../core/decorators.js"
 import { NCWebsocket, Structs } from "node-napcat-ts"
 import { EnhancedMessage } from "../../typings/Message.js"
 import { VaultService } from "./service.js"
-import { resolveScope } from "../../utils/index.js"
+import { getMaskString, resolveScope } from "../../utils/index.js"
 import { BaseScopeType } from "../../typings/Command.js"
 import { renderTemplate } from "../../core/playwright.js"
 import { VaultBill } from "./templates/VaultBill.js"
@@ -20,6 +20,7 @@ export default class VaultModule extends BaseCommand {
   }
 
   @Command('wallet', '查看余额')
+  @Alias('钱包')
   @Usage('wallet [global|<groupId>]')
   @Permission('vault.balance')
   async handleBalance(
@@ -34,8 +35,9 @@ export default class VaultModule extends BaseCommand {
     ])
   }
 
-  @Command('wallet-bill', '查看账户流水')
-  @Usage('wallet-bill [count] [global|<groupId>]')
+  @Command('bill', '查看账户流水')
+  @Alias('流水')
+  @Usage('bill [count] [global|<groupId>]')
   @Permission('vault.bill')
   async handleBills(
     @Message() message: EnhancedMessage,
@@ -52,17 +54,12 @@ export default class VaultModule extends BaseCommand {
     })
     const label = scope.type === BaseScopeType.GROUP ? `群` : '全局'
     const lines = this.vaultService.formatBillsForPrint(bills)
-    this.vaultService.logBills(bills)
     let scopeLabel = label
     if (scope.type === BaseScopeType.GROUP && scope.groupId) {
       try {
         const groupInfo = await bot.get_group_info({ group_id: scope.groupId })
         const name = groupInfo.group_name || String(scope.groupId)
-        if (name.length >= 2) {
-          scopeLabel = `${name[0]}***${name[name.length - 1]}`
-        } else {
-          scopeLabel = `${name}***`
-        }
+        scopeLabel = `${getMaskString(name)} (${getMaskString(scope.groupId.toString())})`
       } catch (error) {
         scopeLabel = `${scope.groupId}`
       }

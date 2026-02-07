@@ -98,3 +98,148 @@
   font-display: swap;
 }
 
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-ExtraLight.ttf") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("JetBrains Mono"), url("/fonts/JetBrainsMono-ExtraBold.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F, U+1E00-1EFF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Light.ttf") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Medium.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Black.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+@font-face {
+  font-family: "MixedCodeFont";
+  src: local("HarmonyOS Sans SC"), url("/fonts/HarmonyOS_Sans_SC_Black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+3000-303F, U+4E00-9FFF, U+FF00-FFEF;
+}
+

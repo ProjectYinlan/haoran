@@ -17,6 +17,7 @@ type CommandHandler = (ws: NCWebsocket, message: EnhancedMessage, args: string[]
 // 参数元数据键
 const PARAM_METADATA_KEY = Symbol('param_metadata')
 const USAGE_METADATA_KEY = Symbol('usage_metadata')
+const ALIAS_METADATA_KEY = Symbol('alias_metadata')
 const EXAMPLE_METADATA_KEY = Symbol('example_metadata')
 const COLLECTED_PARAM_INDEX_KEY = Symbol('collected_param_index')
 const COMMAND_OPTIONS_KEY = Symbol('command_options')
@@ -62,6 +63,11 @@ type CommandOptions = {
 export const getCommandOptions = (target: any, propertyKey: string): CommandOptions => {
   return Reflect.getMetadata(COMMAND_OPTIONS_KEY, target, propertyKey) || {}
 }
+const getAliases = (target: any, propertyKey: string): string[] => {
+  const raw = Reflect.getMetadata(ALIAS_METADATA_KEY, target, propertyKey) as string | string[] | undefined
+  if (!raw) return []
+  return Array.isArray(raw) ? raw : [raw]
+}
 
 const setCommandOptions = (target: any, propertyKey: string, options: CommandOptions) => {
   Reflect.defineMetadata(COMMAND_OPTIONS_KEY, options, target, propertyKey)
@@ -89,8 +95,9 @@ function createCommandDecorator(name: string, description: string, options: Comm
     // 获取参数元数据
     const paramMetadata: { index: number, type: ParamType }[] =
       Reflect.getMetadata(PARAM_METADATA_KEY, target, propertyKey) || []
-    const usage: string | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
+    const usage: string | string[] | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
     const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
+    const aliases = getAliases(target, propertyKey)
     setCommandOptions(target, propertyKey, options)
 
     // 包装原始方法
@@ -145,7 +152,8 @@ function createCommandDecorator(name: string, description: string, options: Comm
       name,
       propertyKey,
       usage,
-      examples
+      examples,
+      aliases,
     })
   }
 }
@@ -159,8 +167,9 @@ export function SubCommand(path: string | string[], description: string = '') {
 
     const paramMetadata: { index: number, type: ParamType }[] =
       Reflect.getMetadata(PARAM_METADATA_KEY, target, propertyKey) || []
-    const usage: string | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
+    const usage: string | string[] | undefined = Reflect.getMetadata(USAGE_METADATA_KEY, target, propertyKey)
     const examples: string[] = Reflect.getMetadata(EXAMPLE_METADATA_KEY, target, propertyKey) || []
+    const aliases = getAliases(target, propertyKey)
 
     const originalMethod = descriptor.value
     descriptor.value = async function (bot: NCWebsocket, message: EnhancedMessage, args: string[], collected?: string[]) {
@@ -213,6 +222,7 @@ export function SubCommand(path: string | string[], description: string = '') {
       propertyKey,
       usage,
       examples,
+      aliases,
       isSubCommand: true,
       subCommandPath,
     })
@@ -230,9 +240,15 @@ export function Permission(permission: string) {
 }
 
 // 用法装饰器
-export function Usage(usage: string) {
+export function Usage(usage: string | string[]) {
   return function (target: any, propertyKey: string) {
     Reflect.defineMetadata(USAGE_METADATA_KEY, usage, target, propertyKey)
+  }
+}
+
+export function Alias(alias: string | string[]) {
+  return function (target: any, propertyKey: string) {
+    Reflect.defineMetadata(ALIAS_METADATA_KEY, alias, target, propertyKey)
   }
 }
 
@@ -282,6 +298,12 @@ export function ModuleDescription(description: string) {
   }
 }
 
+export function ModuleVersion(version: string) {
+  return function (constructor: Function) {
+    ;(constructor as any).moduleVersion = version
+  }
+}
+
 // 基础命令类
 export abstract class BaseCommand {
   static commands: Map<string, {
@@ -289,14 +311,16 @@ export abstract class BaseCommand {
     description: string
     name: string
     propertyKey: string
-    usage?: string
+    usage?: string | string[]
     examples?: string[]
+    aliases?: string[]
     isSubCommand?: boolean
     subCommandPath?: string[]
   }>
   static permissions: Map<string, string>
   static moduleName: string
   static moduleDescription?: string
+  static moduleVersion?: string
 
   get moduleName(): string {
     return (this.constructor as any).moduleName

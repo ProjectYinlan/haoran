@@ -5,6 +5,7 @@ export type StandFriendItem = {
 }
 
 import { Wallet, Users } from 'lucide-react'
+import { getShortNumberString } from '../../../utils'
 
 export type StandResultData = {
   avatarUrl: string
@@ -33,6 +34,7 @@ export const StandResult = ({
   balance,
   totalVisits,
 }: StandResultData) => {
+  if (!avatarUrl || !nickname || !content || !totalScore || !totalCount || !othersScore || !othersCount || !friendsScore || !friends || !balance || !totalVisits) return null;
   return (
     <div className="flex flex-col gap-4 p-6 bg-white rounded-2xl border border-slate-200 text-slate-800">
       <div className="flex gap-3 items-center">
@@ -43,27 +45,27 @@ export const StandResult = ({
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
+      <div className="rounded-xl border border-slate-200 p-4 flex flex-col gap-3 bg-slate-50">
         <div className="flex justify-between text-sm">
           <span>总计</span>
-          <span className="font-medium">{totalScore} 硬币 · {totalCount} 人次</span>
+          <span className="font-medium">{getShortNumberString(totalScore)} 硬币 · {getShortNumberString(totalCount)} 人次</span>
         </div>
         <div className="h-px bg-slate-200" />
         <div className="flex justify-between text-sm">
           <span>路人</span>
-          <span className="font-medium">{othersScore} 硬币 · {othersCount} 人次</span>
+          <span className="font-medium">{getShortNumberString(othersScore)} 硬币 · {getShortNumberString(othersCount)} 人次</span>
         </div>
         <div className="h-px bg-slate-200" />
         <div className="flex justify-between text-sm">
           <span>群友</span>
-          <span className="font-medium">{friendsScore} 硬币 · {friends.length} 人次</span>
+          <span className="font-medium">{getShortNumberString(friendsScore)} 硬币 · {getShortNumberString(friends.length)} 人次</span>
         </div>
         {friends.length > 0 && (
           <div className="grid grid-cols-5 gap-2 pt-2">
             {friends.map(friend => (
               <div key={friend.userId} className="flex flex-col items-center gap-1">
                 <img src={friend.avatarUrl} className="w-9 h-9 rounded-full object-cover" />
-                <span className="text-xs text-slate-500">{friend.score === 0 ? '白嫖' : friend.score}</span>
+                <span className="text-xs text-slate-500">{friend.score === 0 ? '白嫖' : getShortNumberString(friend.score)}</span>
               </div>
             ))}
           </div>
@@ -73,11 +75,11 @@ export const StandResult = ({
       <div className="flex items-center justify-between text-sm text-slate-600">
         <div className="flex items-center gap-2">
           <Wallet className="w-4 h-4" />
-          <span>{balance}</span>
+          <span>{getShortNumberString(balance)}</span>
         </div>
         <div className="flex items-center gap-2">
           <Users className="w-4 h-4" />
-          <span>{totalVisits}</span>
+          <span>{getShortNumberString(totalVisits)}</span>
         </div>
       </div>
     </div>

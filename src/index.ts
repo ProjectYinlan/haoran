@@ -3,7 +3,6 @@ import { connect } from "./bot.js";
 import { createLogger } from './logger.js';
 import { createDataSource } from './core/database.js'
 import { warmupTemplateRenderer } from './core/playwright.js'
-import { configManager } from './config.js'
 
 const logger = createLogger('root');
 

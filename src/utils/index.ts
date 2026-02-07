@@ -28,3 +28,23 @@ export const resolveScope = (message: EnhancedMessage, scopeArg?: string): BaseS
 
   return { type: BaseScopeType.GLOBAL }
 }
+
+export const getMaskString = (str: string) => {
+  if (!str) return str
+  if (str.length <= 2) return str[0] + '**'
+  return str[0] + '**' + str[str.length - 1]
+}
+
+export const getShortNumberString = (number: number) => {
+  if (number < 1000) return `${number}`;
+  const units = ['', 'K', 'M', 'B', 'T', 'P'];
+  let unitIdx = 0;
+  let num = number;
+  while (num >= 1000 && unitIdx < units.length - 1) {
+    num /= 1000;
+    unitIdx++;
+  }
+  const numStr =
+    num % 1 === 0 ? num.toFixed(0) : num.toFixed(1).replace(/\.0$/, '');
+  return `${numStr}${units[unitIdx]}`;
+}

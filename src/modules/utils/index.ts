@@ -79,6 +79,19 @@ export default class ExampleModule extends BaseCommand {
       if (value.startsWith('.')) return `${prefix}${value.slice(1)}`
       return `${prefix}${value}`
     }
+    const normalizeUsage = (value: string | string[], noPrefix?: boolean) => {
+      if (Array.isArray(value)) {
+        return value.map(item => normalizePrefix(item, noPrefix))
+      }
+      return normalizePrefix(value, noPrefix)
+    }
+    const normalizeAliases = (aliases: string[] | undefined, noPrefix?: boolean, moduleName?: string, isSubCommand?: boolean) => {
+      if (!aliases || aliases.length === 0) return []
+      return aliases.map((alias) => {
+        const base = isSubCommand && moduleName ? withModulePrefix(alias, moduleName) : alias
+        return normalizePrefix(base, noPrefix)
+      })
+    }
     const parseRegexMatchers = (regex?: RegExp) => {
       if (!regex) return []
       const source = regex.source
@@ -125,22 +138,25 @@ export default class ExampleModule extends BaseCommand {
       const moduleInfo = commandManager.getModuleInfo(target)
       const commands = moduleCommands
         .map((command) => {
-          const matchers = parseRegexMatchers(command.regex)
-          const noPrefixDisplay = command.noPrefix || Boolean(command.regex)
+          const isRegex = Boolean(command.regex)
+          const matchers = isRegex ? [] : parseRegexMatchers(command.regex)
+          const noPrefixDisplay = command.noPrefix || isRegex
           const usageBase = command.usage
             ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
-            : (command.regex ? command.regex.toString() : command.name)
+            : (isRegex ? '' : command.name)
           const examplesBase = command.examples && command.examples.length > 0
             ? command.examples.map((example) => (
               command.isSubCommand ? withModulePrefix(example, command.moduleName) : example
             ))
-            : (matchers.length > 0 ? matchers : [command.name])
+            : []
           return {
-            name: normalizePrefix(command.name, noPrefixDisplay),
+            name: isRegex ? '' : normalizePrefix(command.name, noPrefixDisplay),
             description: command.description,
-            usage: normalizePrefix(usageBase, noPrefixDisplay),
+            usage: normalizeUsage(usageBase, noPrefixDisplay),
             examples: examplesBase.map((example) => normalizePrefix(example, noPrefixDisplay)),
+            aliases: normalizeAliases(command.aliases, noPrefixDisplay, command.moduleName, command.isSubCommand),
             matchers,
+            isRegex,
             isSubCommand: command.isSubCommand,
             parentCommand: command.parentCommand ? normalizePrefix(command.parentCommand) : undefined,
             subCommandPath: command.subCommandPath,
@@ -165,25 +181,28 @@ export default class ExampleModule extends BaseCommand {
 
     const command = commandManager.getCommandByName(target)
     if (command) {
-      const matchers = parseRegexMatchers(command.regex)
-      const noPrefixDisplay = command.noPrefix || Boolean(command.regex)
+      const isRegex = Boolean(command.regex)
+      const matchers = isRegex ? [] : parseRegexMatchers(command.regex)
+      const noPrefixDisplay = command.noPrefix || isRegex
       const usageBase = command.usage
         ? (command.isSubCommand ? withModulePrefix(command.usage, command.moduleName) : command.usage)
-        : (command.regex ? command.regex.toString() : command.name)
+        : (isRegex ? '' : command.name)
       const examplesBase = command.examples && command.examples.length > 0
         ? command.examples.map((example) => (
           command.isSubCommand ? withModulePrefix(example, command.moduleName) : example
         ))
-        : (matchers.length > 0 ? matchers : [command.name])
+        : []
       const data: HelpData = {
         title: '指令帮助',
         scope: 'command',
         moduleName: command.moduleName,
-        commandName: normalizePrefix(command.name, noPrefixDisplay),
+        commandName: isRegex ? '' : normalizePrefix(command.name, noPrefixDisplay),
         description: command.description,
-        usage: normalizePrefix(usageBase, noPrefixDisplay),
+        usage: normalizeUsage(usageBase, noPrefixDisplay),
         examples: examplesBase.map((example) => normalizePrefix(example, noPrefixDisplay)),
+        aliases: normalizeAliases(command.aliases, noPrefixDisplay, command.moduleName, command.isSubCommand),
         matchers,
+        isRegex,
         isSubCommand: command.isSubCommand,
         parentCommand: command.parentCommand ? normalizePrefix(command.parentCommand) : undefined,
         subCommandPath: command.subCommandPath,
