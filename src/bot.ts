@@ -73,7 +73,10 @@ export async function connect() {
       }, "")
 
       if (!msg.startsWith(globalPrefix || '.')) {
-        await commandManager.handlePlainMessage(bot, enhancedMessage, msg)
+        const handled = await commandManager.handlePlainMessage(bot, enhancedMessage, msg)
+        if (!handled) {
+          await commandManager.handleMessageListeners(bot, enhancedMessage, msg)
+        }
         return
       }
 

@@ -20,7 +20,7 @@ import { BaseScope, BaseScopeType } from "../../typings/Command.js"
 import { join } from "path"
 import { externalModulesPath } from "../../utils/path.js"
 import { StandLogic } from "./templates/StandLogic.js"
-import { createLogger } from "../../logger.js"
+import { createExternalModuleLogger } from "../../logger.js"
 import { configManager } from "../../config.js"
 import { readFile } from "fs/promises"
 
@@ -80,7 +80,7 @@ type StandOutcome = {
 export default class StandOnTheStreetModule extends BaseCommand {
   private vaultService = VaultService.getInstance()
   private standService = StandService.getInstance()
-  private logger = createLogger('external-modules/' + this.moduleName)
+  private logger = createExternalModuleLogger(this.moduleName)
   private logicContent = ''
 
   initialize() {

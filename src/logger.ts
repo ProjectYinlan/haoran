@@ -16,3 +16,11 @@ const baseLogger = pino({
 export const createLogger = (tag: string) => baseLogger.child({
   tag
 })
+
+export const createModuleLogger = (moduleName: string) => baseLogger.child({
+  tag: `modules/${moduleName}`
+})
+
+export const createExternalModuleLogger = (moduleName: string) => baseLogger.child({
+  tag: `external-modules/${moduleName}`
+})

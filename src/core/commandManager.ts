@@ -193,7 +193,7 @@ export class CommandManager {
   async handlePlainMessage(bot: NCWebsocket, message: EnhancedMessage, content: string) {
     const resolved = this.matchNoPrefixCommand(content) ?? this.matchRegexCommand(content)
     const cmd = resolved?.cmd
-    if (!cmd) return
+    if (!cmd) return false
 
     const roles = this.permissionManager.getRoles(message)
     const source = message.message_type === 'group'
@@ -224,12 +224,27 @@ export class CommandManager {
       const startAt = Date.now()
       await cmd.handler(bot, message, remainingArgs)
       logger.debug(`命令耗时: ${cmd.name} ${Date.now() - startAt}ms`)
+      return true
     } catch (error) {
       logger.error('命令执行错误: ')
       logger.error(error)
       await message.reply([
         Structs.text("命令执行出错")
       ])
+      return true
+    }
+  }
+
+  async handleMessageListeners(bot: NCWebsocket, message: EnhancedMessage, content: string) {
+    for (const module of this.modules) {
+      const handler = (module as BaseCommand).onMessage
+      if (typeof handler !== 'function') continue
+      try {
+        await handler.call(module, bot, message, content)
+      } catch (error) {
+        logger.error(`消息监听执行错误: ${module.moduleName}`)
+        logger.error(error)
+      }
     }
   }
 
