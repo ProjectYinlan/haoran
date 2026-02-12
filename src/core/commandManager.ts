@@ -248,6 +248,19 @@ export class CommandManager {
     }
   }
 
+  async handleRequestEvent(bot: NCWebsocket, request: any) {
+    for (const module of this.modules) {
+      const handler = (module as BaseCommand).onRequest
+      if (typeof handler !== 'function') continue
+      try {
+        await handler.call(module, bot, request)
+      } catch (error) {
+        logger.error(`请求事件监听执行错误: ${module.moduleName}`)
+        logger.error(error)
+      }
+    }
+  }
+
   private getSessionKey(userId: number, groupId?: number): string {
     return groupId ? `${groupId}:${userId}` : `private:${userId}`
   }

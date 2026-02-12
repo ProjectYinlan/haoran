@@ -329,4 +329,6 @@ export abstract class BaseCommand {
   abstract initialize(): void
 
   onMessage?(bot: NCWebsocket, message: EnhancedMessage, content: string): Promise<void> | void
+
+  onRequest?(bot: NCWebsocket, request: any): Promise<void> | void
 } 

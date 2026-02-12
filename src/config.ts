@@ -10,6 +10,7 @@ const configSchema = z.object({
   bot: z.object({
     name: z.string().optional(),
     ignoreGroupPrivate: z.boolean().optional(),
+    manageGroupId: z.number().optional(),
     groupAccess: z.object({
       mode: z.enum(['blacklist', 'whitelist']).optional(),
       blacklist: z.array(z.number()).optional(),

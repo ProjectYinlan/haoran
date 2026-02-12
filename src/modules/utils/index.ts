@@ -2,6 +2,7 @@ import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example
 import { Structs } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 import UtilRecord from './entities/UtilRecord.js'
+import ContextEvent, { type ContextEventStatus } from './entities/ContextEvent.js'
 import { getDataSource } from '../../core/database.js'
 import dayjs from 'dayjs'
 import { UserProfile } from './templates/UserProfile.js'
@@ -11,10 +12,31 @@ import { PermissionManager, Role } from '../../core/permissionManager.js'
 import { CommandManager } from '../../core/commandManager.js'
 import { configManager } from '../../config.js'
 import { resolveScope } from '../../utils/index.js'
+import { createLogger } from '../../logger.js'
 
 const utilRecordRepository = getDataSource().getRepository(UtilRecord)
+const contextEventRepository = getDataSource().getRepository(ContextEvent)
 const permissionManager = new PermissionManager()
 const MANAGE_PERMISSION = 'utils.permission.manage'
+const logger = createLogger('modules/utils')
+
+type FriendRequestEvent = {
+  request_type: 'friend'
+  user_id: number
+  comment?: string
+  flag: string
+}
+
+type GroupInviteEvent = {
+  request_type: 'group'
+  sub_type: 'invite'
+  group_id: number
+  user_id: number
+  comment?: string
+  flag: string
+}
+
+type RequestEvent = FriendRequestEvent | GroupInviteEvent
 
 const parseNumber = (value?: string) => {
   if (!value) return undefined
@@ -47,9 +69,167 @@ const addUnique = <T>(list: T[], value: T) => {
   if (!list.includes(value)) list.push(value)
 }
 
+const getMessageText = (message: EnhancedMessage) => {
+  return message.message
+    .filter(segment => segment.type === 'text')
+    .map(segment => segment.data.text)
+    .join('')
+    .trim()
+}
+
+const formatManageHint = () => '回复该消息：同意 / 拒绝 / 忽略'
+
 @Module('utils')
 export default class ExampleModule extends BaseCommand {
   initialize() {
+  }
+
+  async onRequest(bot: any, request: RequestEvent) {
+    const manageGroupId = configManager.config.bot?.manageGroupId
+    if (!manageGroupId) {
+      logger.debug('管理群未配置，忽略请求事件')
+      return
+    }
+
+    const now = new Date()
+    if (request.request_type === 'friend') {
+      const record = await contextEventRepository.save({
+        eventType: 'friend_request',
+        status: 'pending' as ContextEventStatus,
+        requesterId: request.user_id,
+        flag: request.flag,
+        comment: request.comment,
+        createdAt: now,
+      })
+
+      const lines = [
+        '收到好友请求',
+        `用户: ${request.user_id}`,
+        request.comment ? `附言: ${request.comment}` : undefined,
+        formatManageHint(),
+      ].filter(Boolean)
+
+      const sent = await bot.send_msg({
+        group_id: manageGroupId,
+        message: [Structs.text(lines.join('\n'))]
+      })
+
+      await contextEventRepository.update(record.id, {
+        notifyMessageId: sent?.message_id,
+      })
+      return
+    }
+
+    if (request.request_type === 'group' && request.sub_type === 'invite') {
+      const record = await contextEventRepository.save({
+        eventType: 'group_invite',
+        status: 'pending' as ContextEventStatus,
+        requesterId: request.user_id,
+        groupId: request.group_id,
+        flag: request.flag,
+        comment: request.comment,
+        createdAt: now,
+      })
+
+      const lines = [
+        '收到群邀请',
+        `群号: ${request.group_id}`,
+        `邀请人: ${request.user_id}`,
+        request.comment ? `附言: ${request.comment}` : undefined,
+        formatManageHint(),
+      ].filter(Boolean)
+
+      const sent = await bot.send_msg({
+        group_id: manageGroupId,
+        message: [Structs.text(lines.join('\n'))]
+      })
+
+      await contextEventRepository.update(record.id, {
+        notifyMessageId: sent?.message_id,
+      })
+    }
+  }
+
+  async onMessage(_bot: any, message: EnhancedMessage) {
+    const manageGroupId = configManager.config.bot?.manageGroupId
+    if (!manageGroupId) return
+    if (message.message_type !== 'group' || message.group_id !== manageGroupId) return
+
+    const hasReply = message.message.some(segment => segment.type === 'reply')
+    if (!hasReply) return
+
+    const roles = permissionManager.getRoles(message)
+    if (!roles.includes(Role.Owner) && !roles.includes(Role.BotAdmin)) {
+      await message.reply([Structs.text('权限不足，仅 Owner / BotAdmin 可处理')])
+      return
+    }
+
+    const content = getMessageText(message)
+    const action = content.replace(/\s+/g, '')
+    const actionMap: Record<string, ContextEventStatus> = {
+      '同意': 'approved',
+      '拒绝': 'rejected',
+      '忽略': 'ignored',
+    }
+    const nextStatus = actionMap[action]
+    if (!nextStatus) return
+
+    const quote = await message.getQuoteMessage()
+    const quoteMessageId = quote?.message_id
+    if (!quoteMessageId) return
+
+    const record = await contextEventRepository.findOne({
+      where: {
+        notifyMessageId: quoteMessageId
+      }
+    })
+    if (!record) {
+      await message.reply([Structs.text('未找到对应的上下文事件')])
+      return
+    }
+    if (record.status !== 'pending') {
+      await message.reply([Structs.text('该事件已处理')])
+      return
+    }
+
+    if (nextStatus === 'ignored') {
+      await contextEventRepository.update(record.id, {
+        status: nextStatus,
+        operatorId: message.sender.user_id,
+        handledAt: new Date(),
+      })
+      await message.reply([Structs.text('已忽略该请求')])
+      return
+    }
+
+    const approve = nextStatus === 'approved'
+    try {
+      if (record.eventType === 'friend_request') {
+        await _bot.set_friend_add_request({
+          flag: record.flag,
+          approve,
+        })
+      } else if (record.eventType === 'group_invite') {
+        await _bot.set_group_add_request({
+          flag: record.flag,
+          sub_type: 'invite',
+          approve,
+        })
+      }
+    } catch (error) {
+      logger.error('处理请求事件失败')
+      logger.error(error)
+      await message.reply([Structs.text('处理请求失败，请稍后重试')])
+      return
+    }
+
+    await contextEventRepository.update(record.id, {
+      status: nextStatus,
+      operatorId: message.sender.user_id,
+      handledAt: new Date(),
+    })
+
+    await message.reply([Structs.text(approve ? '已同意请求' : '已拒绝请求')])
   }
 
   @Command('help', '查看指令帮助')

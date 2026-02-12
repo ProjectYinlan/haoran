@@ -88,6 +88,10 @@ export async function connect() {
       await commandManager.handleCommand(bot, enhancedMessage, command, args)
     })
 
+    bot.on('request', async (request: any) => {
+      await commandManager.handleRequestEvent(bot, request)
+    })
+
     await bot.connect()
     logger.info("Onebot 连接成功")
 
