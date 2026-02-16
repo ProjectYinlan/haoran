@@ -1,10 +1,16 @@
 import dayjs from "dayjs"
+import classNames from "classnames"
 
 type FrameMeta = {
   botName?: string
   poweredBy?: string
   generatedAt?: Date
   devMode?: boolean
+  renderSize?: {
+    width: number
+    height: number | 'auto'
+  }
+  className?: string
 }
 
 const getGlobalFrameMeta = (): FrameMeta => {
@@ -16,16 +22,24 @@ export const Frame = ({ children, fit = false, meta }: { children: React.ReactNo
   const runtimeMeta = { poweredBy: 'ProjectYinlan', ...getGlobalFrameMeta(), ...meta }
   const generatedAt = runtimeMeta.generatedAt ?? new Date()
   const devMode = runtimeMeta.devMode ?? (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development')
+  const renderWidth = runtimeMeta.renderSize?.width ?? 0
+  const isCompact = renderWidth > 0 && renderWidth <= 440
+  const containerClass = classNames(
+    'flex flex-col w-full font-sans bg-white',
+    isCompact ? 'gap-1.5 p-3 pb-2' : 'gap-2 p-4 pb-3',
+    fit ? 'h-auto' : 'h-full',
+    runtimeMeta.className
+  )
+  const footerClass = isCompact ? 'text-[10px]' : 'text-3xs'
   return (
-    <div className={['flex flex-col gap-2 w-full bg-white p-4 pb-3 font-sans', fit ? 'h-auto' : 'h-full'].join(' ')}>
+    <div className={containerClass}>
       {children}
-      <div className="flex flex-col text-3xs text-slate-300 text-center">
+      <div className={`flex flex-col ${footerClass} text-slate-300 text-center`}>
         <span>Powered by {runtimeMeta.poweredBy}.{runtimeMeta.botName && ` Bot: ${runtimeMeta.botName}`}</span>
         <span>
           Generated at {dayjs(generatedAt).format('YYYY-MM-DD HH:mm:ss')}.
           {devMode && ' Dev Mode.'}
         </span>
-
       </div>
     </div>
   )

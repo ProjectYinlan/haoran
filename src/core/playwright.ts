@@ -113,6 +113,7 @@ type RenderTemplateOptions = {
   minHeight?: number
   maxHeight?: number
   scale?: number
+  frameClassName?: string
 }
 
 const getTailwindCss = async (): Promise<string> => {
@@ -270,6 +271,11 @@ export const renderTemplate = async (el: JSX.Element, options?: RenderTemplateOp
       botName: (configManager.config as any)?.bot?.name,
       generatedAt: new Date(),
       devMode: configManager.config.devMode ?? (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development'),
+      renderSize: {
+        width,
+        height: autoHeight ? 'auto' : height,
+      },
+      className: options?.frameClassName,
     },
   }))
   const devCssLink = tailwindDevServerUrl

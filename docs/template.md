@@ -44,6 +44,13 @@ export const preview = {
 
 组件本身接收 props 作为渲染数据。
 
+## Frame 尺寸与内边距
+
+`renderTemplate` 传入的 `width`/`height` 是 **Frame 的整体尺寸**，包含 Frame 的 padding。
+
+因此组件内部宽度应使用 `w-full` 或自行减去内边距（例如 420 宽的画布，内部可用宽度约为 420 - 2 * 12）。
+需要紧凑布局时，可通过缩小组件本身的间距，而不应再外层套固定宽度。
+
 ## 环境变量与渲染行为
 
 - `TEMPLATE_DEV_SERVER_URL`：dev 模式下用于加载 Vite 的 CSS（例如 `http://localhost:39993`）。
