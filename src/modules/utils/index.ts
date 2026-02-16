@@ -1,5 +1,5 @@
-import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example } from '../../core/decorators.js'
-import { Structs } from 'node-napcat-ts'
+import { BaseCommand, Command, Module, Permission, Message, Args, Usage, Example, Bot } from '../../core/decorators.js'
+import { Structs, NCWebsocket, type SendMessageSegment } from 'node-napcat-ts'
 import { EnhancedMessage } from '../../typings/Message.js'
 import UtilRecord from './entities/UtilRecord.js'
 import ContextEvent, { type ContextEventStatus } from './entities/ContextEvent.js'
@@ -10,6 +10,7 @@ import { Help, type HelpData } from './templates/Help.js'
 import { renderTemplate } from '../../core/playwright.js'
 import { PermissionManager, Role } from '../../core/permissionManager.js'
 import { CommandManager } from '../../core/commandManager.js'
+import { Scheduler } from '../../core/scheduler.js'
 import { configManager } from '../../config.js'
 import { resolveScope } from '../../utils/index.js'
 import { createLogger } from '../../logger.js'
@@ -69,6 +70,8 @@ const addUnique = <T>(list: T[], value: T) => {
   if (!list.includes(value)) list.push(value)
 }
 
+const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+
 const getMessageText = (message: EnhancedMessage) => {
   return message.message
     .filter(segment => segment.type === 'text')
@@ -79,8 +82,29 @@ const getMessageText = (message: EnhancedMessage) => {
 
 const formatManageHint = () => '回复该消息：同意 / 拒绝 / 忽略'
 
+const getQuotedContent = async (message: EnhancedMessage) => {
+  const quote = await message.getQuoteMessage()
+  const content = (quote as { message?: SendMessageSegment[] } | undefined)?.message
+  if (!content || content.length === 0) return undefined
+  return content
+}
+
+const parseCronAndCommand = (args: string[]) => {
+  const rest = args.slice(1)
+  if (rest.length < 6) return undefined
+  const cronPartCount = rest.length >= 7 ? 6 : 5
+  const cronParts = rest.slice(0, cronPartCount)
+  const commandParts = rest.slice(cronPartCount)
+  if (commandParts.length === 0) return undefined
+  return {
+    cron: cronParts.join(' '),
+    command: commandParts[0],
+    commandArgs: commandParts.slice(1),
+  }
+}
+
 @Module('utils')
-export default class ExampleModule extends BaseCommand {
+export default class UtilsModule extends BaseCommand {
   initialize() {
   }
 
@@ -484,6 +508,140 @@ export default class ExampleModule extends BaseCommand {
         height: 125
       }))
     ])
+  }
+
+  @Command('forward', '转发指定群')
+  @Usage('forward <groupId>')
+  @Example('forward 123456')
+  @Permission('utils.forward')
+  async handleForward(
+    @Message() message: EnhancedMessage,
+    @Args() args: string[],
+    @Bot() bot: NCWebsocket,
+  ) {
+    const groupId = parseNumber(args[0])
+    if (!groupId) {
+      await message.reply([Structs.text('用法: .forward <groupId>')])
+      return
+    }
+
+    const content = await getQuotedContent(message)
+    if (!content) {
+      await message.reply([Structs.text('未找到被回复的原消息，请回复一条消息再使用该指令')])
+      return
+    }
+
+    try {
+      await bot.send_msg({ group_id: groupId, message: content })
+    } catch (error) {
+      logger.error('转发消息失败')
+      logger.error(error)
+      await message.reply([Structs.text('转发失败，请稍后重试')])
+      return
+    }
+
+    await message.reply([Structs.text(`已转发到群 ${groupId}`)])
+  }
+
+  @Command('broadcast', '广播到所有群')
+  @Usage('broadcast')
+  @Permission('utils.broadcast')
+  async handleBroadcast(
+    @Message() message: EnhancedMessage,
+    @Bot() bot: NCWebsocket,
+  ) {
+    const content = await getQuotedContent(message)
+    if (!content) {
+      await message.reply([Structs.text('未找到被回复的原消息，请回复一条消息再使用该指令')])
+      return
+    }
+
+    const groups = await bot.get_group_list()
+    if (!groups || groups.length === 0) {
+      await message.reply([Structs.text('暂无可广播的群')])
+      return
+    }
+
+    const failedGroups: number[] = []
+    for (let index = 0; index < groups.length; index += 1) {
+      const group = groups[index]
+      try {
+        await bot.send_msg({ group_id: group.group_id, message: content })
+      } catch (error) {
+        failedGroups.push(group.group_id)
+        logger.error(`广播发送失败: ${group.group_id}`)
+        logger.error(error)
+      }
+      if (index < groups.length - 1) {
+        await sleep(200)
+      }
+    }
+
+    if (failedGroups.length > 0) {
+      await message.reply([Structs.text(`广播完成，失败群: ${failedGroups.join(', ')}`)])
+      return
+    }
+
+    await message.reply([Structs.text('广播完成')])
+  }
+
+  @Command('schedule-command', '设置定时触发某指令')
+  @Usage('schedule-command <taskId> <cron> <command> [args...]')
+  @Example('schedule-command daily 0 9 * * * ping')
+  @Example('schedule-command quick */10 * * * * * help utils')
+  @Permission('utils.schedule-command')
+  async handleScheduleCommand(
+    @Message() message: EnhancedMessage,
+    @Args() args: string[],
+  ) {
+    const taskId = (args[0] ?? '').trim()
+    const parsed = parseCronAndCommand(args)
+    if (!taskId || !parsed) {
+      await message.reply([Structs.text('用法: .schedule-command <taskId> <cron> <command> [args...]')])
+      return
+    }
+
+    const scheduler = Scheduler.getInstance()
+    const commandManager = CommandManager.getInstance()
+    if (!commandManager) {
+      await message.reply([Structs.text('命令管理器未就绪')])
+      return
+    }
+
+    const scheduleId = `utils.schedule-command.${taskId}`
+    const quotedContent = await getQuotedContent(message)
+    scheduler.register(scheduleId, parsed.cron, async (scheduledBot) => {
+      const scheduledMessage = quotedContent
+        ? {
+          ...message,
+          getQuoteMessage: async () => ({ message: quotedContent } as any),
+        }
+        : message
+      await commandManager.handleCommand(scheduledBot, scheduledMessage, parsed.command, parsed.commandArgs)
+    })
+
+    const hint = `已注册任务 ${scheduleId}，cron=${parsed.cron}`
+    await message.reply([Structs.text(hint)])
+  }
+
+  @Command('schedule-command-remove', '移除定时指令任务')
+  @Usage('schedule-command-remove <taskId>')
+  @Example('schedule-command-remove daily')
+  @Permission('utils.schedule-command')
+  async handleScheduleCommandRemove(
+    @Message() message: EnhancedMessage,
+    @Args() args: string[],
+  ) {
+    const taskId = (args[0] ?? '').trim()
+    if (!taskId) {
+      await message.reply([Structs.text('用法: .schedule-command-remove <taskId>')])
+      return
+    }
+
+    const scheduler = Scheduler.getInstance()
+    const scheduleId = `utils.schedule-command.${taskId}`
+    scheduler.unregister(scheduleId)
+    await message.reply([Structs.text(`已移除任务 ${scheduleId}`)])
   }
 
   @Command('perm-grant-user', '给指定用户赋予权限')
