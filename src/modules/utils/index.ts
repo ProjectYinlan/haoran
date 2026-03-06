@@ -182,12 +182,6 @@ export default class UtilsModule extends BaseCommand {
     const hasReply = message.message.some(segment => segment.type === 'reply')
     if (!hasReply) return
 
-    const roles = permissionManager.getRoles(message)
-    if (!roles.includes(Role.Owner) && !roles.includes(Role.BotAdmin)) {
-      await message.reply([Structs.text('权限不足，仅 Owner / BotAdmin 可处理')])
-      return
-    }
-
     const content = getMessageText(message)
     const action = content.replace(/\s+/g, '')
     const actionMap: Record<string, ContextEventStatus> = {
@@ -197,6 +191,12 @@ export default class UtilsModule extends BaseCommand {
     }
     const nextStatus = actionMap[action]
     if (!nextStatus) return
+
+    const roles = permissionManager.getRoles(message)
+    if (!roles.includes(Role.Owner) && !roles.includes(Role.BotAdmin)) {
+      await message.reply([Structs.text('权限不足，仅 Owner / BotAdmin 可处理')])
+      return
+    }
 
     const quote = await message.getQuoteMessage()
     const quoteMessageId = quote?.message_id
