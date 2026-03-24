@@ -27,7 +27,8 @@ import { createExternalModuleLogger } from "../../logger.js"
 import { configManager } from "../../config.js"
 import { readFile } from "fs/promises"
 import { rollEvents, type RollEventResult, type EventEffect, defaultEffect } from "./events.js"
-import { allItems, getItemByName, type StandItem } from "./items.js"
+import { allItems, allBundles, getBundleItems, getBundleTotalPrice, bundleNameMap, getItemByName, type StandItem } from "./items.js"
+import { StandBundleBuy } from "./templates/StandBundleBuy.js"
 import { PLAN_TIERS, type PlanTier, getNext4AM, getLast4AM } from "./plans.js"
 import { StandPlanStatus } from "./templates/StandPlanStatus.js"
 import { StandPlanSub } from "./templates/StandPlanSub.js"
@@ -277,7 +278,13 @@ export default class StandOnTheStreetModule extends BaseCommand {
       await message.reply([Structs.text('站街模块未开启')])
       return
     }
-    const shopEl = StandShop({ items: allItems })
+    const bundleInfos = allBundles.map(b => ({
+      name: b.name,
+      itemNames: getBundleItems(b).map(i => i.name),
+      totalPrice: getBundleTotalPrice(b),
+      serviceFee: b.serviceFee,
+    }))
+    const shopEl = StandShop({ items: allItems, bundles: bundleInfos })
     if (!shopEl) return
     const image = await renderTemplate(shopEl, { width: 400, height: 'auto' })
     await message.reply([Structs.image(image)])
@@ -383,6 +390,105 @@ export default class StandOnTheStreetModule extends BaseCommand {
       await message.reply([Structs.image(image)])
     }
     this.logger.debug(`用户${userId} 购买 ${item.id} x${quantity} 花费${totalCost}`)
+  }
+
+  @RegexCommand(/^一键购买\s*/, '一键购买套餐')
+  @Usage('一键购买 <套餐名>')
+  @Permission('stand-on-the-street.shop')
+  @GroupOnly('该命令仅限群聊使用')
+  async handleBundleBuy(
+    @Message() message: EnhancedMessage,
+  ) {
+    if (standConfig?.enabled === false) {
+      await message.reply([Structs.text('站街模块未开启')])
+      return
+    }
+    if (message.message_type !== 'group') return
+    const rawText = message.message
+      .filter(s => s.type === 'text')
+      .map(s => s.data.text)
+      .join('')
+      .trim()
+    const match = rawText.match(/^一键购买\s*(\S+)?$/)
+    const bundleName = match?.[1]
+
+    if (!bundleName) {
+      const bundleInfos = allBundles.map(b => ({
+        name: b.name,
+        itemNames: getBundleItems(b).map(i => i.name),
+        totalPrice: getBundleTotalPrice(b),
+        serviceFee: b.serviceFee,
+      }))
+      const shopEl = StandShop({ items: allItems, bundles: bundleInfos })
+      if (shopEl) {
+        const image = await renderTemplate(shopEl, { width: 400, height: 'auto' })
+        await message.reply([Structs.image(image)])
+      }
+      return
+    }
+
+    const bundle = bundleNameMap.get(bundleName)
+    if (!bundle) {
+      await message.reply([Structs.text(`没有找到名为「${bundleName}」的套餐`)])
+      return
+    }
+
+    const items = getBundleItems(bundle)
+    const totalCost = getBundleTotalPrice(bundle)
+    const userId = message.sender.user_id
+    const groupId = message.group_id
+    const scope = resolveScope(message)
+    const account = await this.vaultService.getOrCreateAccount(userId, scope)
+    const previousBalance = Number(account.balance)
+
+    if (previousBalance < totalCost) {
+      await message.reply([Structs.text(`余额不足，需要 ${totalCost} 硬币，当前余额 ${previousBalance}`)])
+      return
+    }
+
+    const hasInstant = items.some(i => i.phase === 'instant')
+    if (hasInstant) {
+      await message.reply([Structs.text('套餐中包含即时道具（如咖啡），请单独购买')])
+      return
+    }
+
+    const merchantOrderId = randomUUID()
+    const billResult = await this.vaultService.applyBill({
+      userId,
+      change: -totalCost,
+      type: 'expense',
+      source: 'stand-on-the-street',
+      description: `站街商店 - 一键购买${bundle.name}`,
+      scope,
+      merchantOrderId,
+      merchantMeta: { type: 'shop_bundle', bundleId: bundle.id, itemIds: bundle.itemIds },
+    })
+    if (!billResult.ok) {
+      await message.reply([Structs.text('购买失败，请稍后重试')])
+      return
+    }
+
+    for (const item of items) {
+      await this.standService.addInventoryItem(userId, groupId, item.id, 1)
+    }
+
+    const newBalance = Number(billResult.account.balance)
+    const nickname = message.sender.card || message.sender.nickname || String(userId)
+    const el = StandBundleBuy({
+      avatarUrl: getQQAvatarUrl(userId, 100),
+      nickname,
+      bundleName: bundle.name,
+      items: items.map(i => ({ name: i.name, price: i.price })),
+      serviceFee: bundle.serviceFee,
+      totalCost,
+      balance: newBalance,
+      previousBalance,
+    })
+    if (el) {
+      const image = await renderTemplate(el, { width: 400, height: 'auto' })
+      await message.reply([Structs.image(image)])
+    }
+    this.logger.debug(`用户${userId} 一键购买 ${bundle.id} 花费${totalCost}`)
   }
 
   @NoPrefixCommand('背包', '查看站街道具背包')

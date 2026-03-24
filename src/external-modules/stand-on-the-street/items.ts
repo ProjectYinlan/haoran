@@ -145,3 +145,35 @@ export function getItemById(id: string): StandItem | undefined {
 export function getItemByName(name: string): StandItem | undefined {
   return itemNameMap.get(name)
 }
+
+export type StandBundle = {
+  id: string
+  name: string
+  itemIds: string[]
+  serviceFee: number
+}
+
+export const allBundles: StandBundle[] = [
+  {
+    id: 'bundle_1',
+    name: '进攻套餐',
+    itemIds: ['billboard', 'lucky_clover', 'high_heels', 'megaphone'],
+    serviceFee: 50,
+  },
+  {
+    id: 'bundle_2',
+    name: '豪华套餐',
+    itemIds: ['billboard', 'lucky_clover', 'high_heels', 'megaphone', 'insurance', 'red_envelope'],
+    serviceFee: 50,
+  },
+]
+
+export function getBundleItems(bundle: StandBundle): StandItem[] {
+  return bundle.itemIds.map(id => itemMap.get(id)!).filter(Boolean)
+}
+
+export function getBundleTotalPrice(bundle: StandBundle): number {
+  return getBundleItems(bundle).reduce((sum, item) => sum + item.price, 0) + bundle.serviceFee
+}
+
+export const bundleNameMap = new Map(allBundles.map(b => [b.name, b]))

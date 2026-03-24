@@ -1,13 +1,21 @@
-import { ShoppingBag } from 'lucide-react'
+import { ShoppingBag, PackageCheck } from 'lucide-react'
 import { getShortNumberString } from '../../../utils/index.js'
 import { Tag } from '../../../core/components/Tag.js'
 import type { StandItem } from '../items.js'
 
-export type StandShopData = {
-  items: StandItem[]
+export type ShopBundleInfo = {
+  name: string
+  itemNames: string[]
+  totalPrice: number
+  serviceFee: number
 }
 
-export const StandShop = ({ items = [] }: StandShopData) => {
+export type StandShopData = {
+  items: StandItem[]
+  bundles?: ShopBundleInfo[]
+}
+
+export const StandShop = ({ items = [], bundles = [] }: StandShopData) => {
   return (
     <div className="flex flex-col gap-4 p-6 bg-white rounded-2xl border border-slate-200 text-slate-800">
       <div className="flex items-center gap-2">
@@ -28,8 +36,29 @@ export const StandShop = ({ items = [] }: StandShopData) => {
         ))}
       </div>
 
+      {bundles.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-1">
+            <PackageCheck className="w-4.5 h-4.5 text-indigo-600" />
+            <span className="text-sm font-semibold text-indigo-700">一键套餐</span>
+            <span className="text-xs text-slate-400">含 {bundles[0]?.serviceFee ?? 50} 代理费</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {bundles.map(b => (
+              <div key={b.name} className="flex items-center justify-between rounded-xl bg-indigo-50 border border-indigo-200 px-4 py-3">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-indigo-800">{b.name}</span>
+                  <span className="text-xs text-indigo-500">{b.itemNames.join(' + ')}</span>
+                </div>
+                <Tag color="primary">{getShortNumberString(b.totalPrice)} 硬币</Tag>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="text-xs text-slate-400 text-center">
-        使用「购买 道具名 [数量]」购买 · 道具在下次站街时自动生效
+        「购买 道具名 [数量]」单买 · 「一键购买 套餐名」套餐购买
       </div>
     </div>
   )
@@ -46,6 +75,10 @@ export const preview = {
       { id: 'vip_card', name: '贵宾卡', description: '下次站街 CD 减半', price: 800, phase: 'on_settle' as const, effect: {} },
       { id: 'amulet', name: '护身符', description: '免疫一次负面事件', price: 400, phase: 'pre_event' as const, effect: {} },
       { id: 'lucky_clover', name: '幸运草', description: '正面事件概率 x2', price: 300, phase: 'pre_event' as const, effect: {} },
+    ],
+    bundles: [
+      { name: '进攻套餐', itemNames: ['广告牌', '幸运草', '高跟鞋', '喇叭'], totalPrice: 1850, serviceFee: 50 },
+      { name: '豪华套餐', itemNames: ['广告牌', '幸运草', '高跟鞋', '喇叭', '保险', '红包'], totalPrice: 2350, serviceFee: 50 },
     ],
   } satisfies StandShopData,
   size: { width: 400, height: 'auto' as const },
