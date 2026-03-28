@@ -100,7 +100,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     })
   }
 
-  @RegexCommand(/^站街/, '进行随机站街')
+  @RegexCommand(/^站街(?!商店|数据|逻辑|人气榜|赚钱榜|赔钱榜|贞洁榜|常客榜|plan)/, '进行随机站街')
   @Usage('站街 [道具...]')
   @Permission('stand-on-the-street.work')
   @GroupOnly('该命令仅限群聊使用')
