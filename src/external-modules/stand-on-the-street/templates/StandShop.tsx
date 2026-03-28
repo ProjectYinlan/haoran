@@ -58,7 +58,7 @@ export const StandShop = ({ items = [], bundles = [] }: StandShopData) => {
       )}
 
       <div className="text-xs text-slate-400 text-center">
-        「购买 道具名 [数量]」单买 · 「一键购买 套餐名」套餐购买
+        「站街 道具名...」即买即用 · 「咖啡」清除CD · 「加钱站街」付费额外站
       </div>
     </div>
   )
@@ -69,12 +69,12 @@ export const preview = {
   component: StandShop,
   defaultData: {
     items: [
-      { id: 'billboard', name: '广告牌', description: '下次站街收入 x1.5', price: 500, phase: 'on_settle' as const, effect: {} },
-      { id: 'pepper_spray', name: '防狼喷雾', description: '免疫一次被点名', price: 300, phase: 'on_call_defense' as const, effect: {} },
-      { id: 'insurance', name: '保险', description: '若本次收入为 0，赔偿平均收入', price: 200, phase: 'on_settle' as const, effect: {} },
-      { id: 'vip_card', name: '贵宾卡', description: '下次站街 CD 减半', price: 800, phase: 'on_settle' as const, effect: {} },
-      { id: 'amulet', name: '护身符', description: '免疫一次负面事件', price: 400, phase: 'pre_event' as const, effect: {} },
-      { id: 'lucky_clover', name: '幸运草', description: '正面事件概率 x2', price: 300, phase: 'pre_event' as const, effect: {} },
+      { id: 'billboard', name: '广告牌', description: '收入 x1.5，保底 3 人', price: 500, category: 'active' as const, effect: {}, dailyBuyLimit: 3 },
+      { id: 'pepper_spray', name: '防狼喷雾', description: '免疫一次被点名', price: 300, category: 'passive' as const, effect: {}, dailyBuyLimit: 2 },
+      { id: 'insurance', name: '保险', description: '零收入赔偿', price: 200, category: 'active' as const, effect: {}, dailyBuyLimit: 3 },
+      { id: 'vip_card', name: '贵宾卡', description: 'CD 减半', price: 800, category: 'active' as const, effect: {}, dailyBuyLimit: 2 },
+      { id: 'amulet', name: '护身符', description: '免疫负面事件', price: 400, category: 'active' as const, effect: {}, dailyBuyLimit: 3 },
+      { id: 'lucky_clover', name: '幸运草', description: '必定正面事件', price: 300, category: 'active' as const, effect: {}, dailyBuyLimit: 2 },
     ],
     bundles: [
       { name: '进攻套餐', itemNames: ['广告牌', '幸运草', '高跟鞋', '喇叭'], totalPrice: 1850, serviceFee: 50 },

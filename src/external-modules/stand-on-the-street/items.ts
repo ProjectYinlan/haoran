@@ -1,137 +1,138 @@
 export type ItemEffect = {
-  /** Multiplier on final income */
   incomeMultiplier?: number
-  /** Multiplier on CD duration */
   cdMultiplier?: number
-  /** If true, blocks being targeted by call mode once */
   blockCall?: boolean
-  /** If true, insures against zero-income (pays recentAvg) */
   insurance?: boolean
-  /** If true, blocks one negative event */
   amulet?: boolean
-  /** If true, guarantees a positive event */
   luckyClover?: boolean
-  /** Guarantee minimum total customer count */
   minTotalCount?: number
-  /** Extra call rounds [min, max] for 操 command */
   callExtraRounds?: [number, number]
-  /** Multiplier on passerby count */
   othersCountMultiplier?: number
-  /** Reflect call damage back to caller */
   reflectCall?: boolean
-  /** Pay each visiting friend, guarantee they visit next time */
   redEnvelope?: number
-  /** Instantly reduce CD by this many ms on purchase */
   cdReduceMs?: number
 }
 
-export type ItemPhase = 'pre_event' | 'post_event' | 'on_settle' | 'on_call_defense' | 'instant'
+export type ItemCategory = 'active' | 'call' | 'passive' | 'instant'
 
 export type StandItem = {
   id: string
   name: string
   description: string
   price: number
-  phase: ItemPhase
+  category: ItemCategory
   effect: ItemEffect
+  dailyBuyLimit: number
 }
 
 export const allItems: StandItem[] = [
   {
     id: 'billboard',
     name: '广告牌',
-    description: '下次站街收入 x1.5，保底 3 人光顾',
+    description: '收入 x1.5，保底 3 人光顾',
     price: 500,
-    phase: 'on_settle',
+    category: 'active',
     effect: { incomeMultiplier: 1.5, minTotalCount: 3 },
+    dailyBuyLimit: 3,
   },
   {
     id: 'pepper_spray',
     name: '防狼喷雾',
     description: '免疫一次被点名',
     price: 300,
-    phase: 'on_call_defense',
+    category: 'passive',
     effect: { blockCall: true },
+    dailyBuyLimit: 2,
   },
   {
     id: 'insurance',
     name: '保险',
     description: '若本次收入为 0，赔偿平均收入',
     price: 200,
-    phase: 'on_settle',
+    category: 'active',
     effect: { insurance: true },
+    dailyBuyLimit: 3,
   },
   {
     id: 'vip_card',
     name: '贵宾卡',
-    description: '下次站街 CD 减半',
+    description: 'CD 减半',
     price: 800,
-    phase: 'on_settle',
+    category: 'active',
     effect: { cdMultiplier: 0.5 },
+    dailyBuyLimit: 2,
   },
   {
     id: 'amulet',
     name: '护身符',
     description: '免疫一次负面事件',
     price: 400,
-    phase: 'pre_event',
+    category: 'active',
     effect: { amulet: true },
+    dailyBuyLimit: 3,
   },
   {
     id: 'lucky_clover',
     name: '幸运草',
-    description: '下次站街必定触发正面事件',
+    description: '必定触发正面事件',
     price: 300,
-    phase: 'pre_event',
+    category: 'active',
     effect: { luckyClover: true },
+    dailyBuyLimit: 2,
   },
   {
     id: 'pill',
     name: '小药丸',
-    description: '下次操可连续触发 2-3 次',
+    description: '操可连续触发 2-3 次',
     price: 600,
-    phase: 'on_settle',
+    category: 'call',
     effect: { callExtraRounds: [1, 2] },
+    dailyBuyLimit: 2,
   },
   {
     id: 'coffee',
     name: '咖啡',
-    description: '购买后立即减少 2 小时 CD',
+    description: '立即减少 2 小时 CD',
     price: 400,
-    phase: 'instant',
+    category: 'instant',
     effect: { cdReduceMs: 2 * 3600000 },
+    dailyBuyLimit: 3,
   },
   {
     id: 'high_heels',
     name: '高跟鞋',
-    description: '下次站街收入 x2，但 CD x1.5',
+    description: '收入 x2，但 CD x1.5',
     price: 600,
-    phase: 'on_settle',
+    category: 'active',
     effect: { incomeMultiplier: 2, cdMultiplier: 1.5 },
+    dailyBuyLimit: 2,
   },
   {
     id: 'megaphone',
     name: '喇叭',
-    description: '下次站街路人数量 x2',
+    description: '路人数量 x2',
     price: 400,
-    phase: 'on_settle',
+    category: 'active',
     effect: { othersCountMultiplier: 2 },
+    dailyBuyLimit: 3,
   },
   {
     id: 'boomerang',
     name: '回旋镖',
     description: '被操时反弹同等金额给对方',
     price: 700,
-    phase: 'on_call_defense',
+    category: 'passive',
     effect: { reflectCall: true },
+    dailyBuyLimit: 2,
   },
   {
     id: 'red_envelope',
     name: '红包',
-    description: '下次站街给每位群友发 50，他们下次必来',
+    description: '给每位新群友发 50，他们下次必来',
     price: 300,
-    phase: 'on_settle',
+    category: 'active',
     effect: { redEnvelope: 50 },
+    dailyBuyLimit: 2,
   },
 ]
 
@@ -163,7 +164,7 @@ export const allBundles: StandBundle[] = [
   {
     id: 'bundle_2',
     name: '豪华套餐',
-    itemIds: ['billboard', 'lucky_clover', 'high_heels', 'megaphone', 'insurance', 'red_envelope'],
+    itemIds: ['billboard', 'lucky_clover', 'high_heels', 'megaphone'],
     serviceFee: 50,
   },
 ]
@@ -177,3 +178,51 @@ export function getBundleTotalPrice(bundle: StandBundle): number {
 }
 
 export const bundleNameMap = new Map(allBundles.map(b => [b.name, b]))
+
+const allNames = [
+  ...allItems.map(i => i.name),
+  ...allBundles.map(b => b.name),
+].sort((a, b) => b.length - a.length)
+
+export type ParsedItems = {
+  items: StandItem[]
+  bundles: StandBundle[]
+  unknown: string[]
+}
+
+export function parseItemsFromText(text: string): ParsedItems {
+  const items: StandItem[] = []
+  const bundles: StandBundle[] = []
+  const unknown: string[] = []
+  let remaining = text.replace(/\s+/g, '')
+
+  while (remaining.length > 0) {
+    let matched = false
+    for (const name of allNames) {
+      if (remaining.startsWith(name)) {
+        const item = itemNameMap.get(name)
+        if (item) {
+          if (!items.some(i => i.id === item.id)) items.push(item)
+        } else {
+          const bundle = bundleNameMap.get(name)
+          if (bundle && !bundles.some(b => b.id === bundle.id)) bundles.push(bundle)
+        }
+        remaining = remaining.slice(name.length)
+        matched = true
+        break
+      }
+    }
+    if (!matched) {
+      unknown.push(remaining[0])
+      remaining = remaining.slice(1)
+    }
+  }
+
+  for (const bundle of bundles) {
+    for (const item of getBundleItems(bundle)) {
+      if (!items.some(i => i.id === item.id)) items.push(item)
+    }
+  }
+
+  return { items, bundles, unknown }
+}

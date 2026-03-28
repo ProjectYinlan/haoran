@@ -80,6 +80,48 @@ export default class StandRecord {
   })
   notify?: boolean | null
 
+  @Column({
+    type: 'jsonb',
+    default: () => "'[]'"
+  })
+  equippedItems: string[]
+
+  @Column({
+    type: 'integer',
+    default: 0
+  })
+  coffeeDebuff: number
+
+  @Column({
+    type: 'bigint',
+    default: 0
+  })
+  coffeeDebuffExpiry: number
+
+  @Column({
+    type: 'integer',
+    default: 0
+  })
+  paidStandCount: number
+
+  @Column({
+    type: 'bigint',
+    default: 0
+  })
+  lastPaidReset: number
+
+  @Column({
+    type: 'jsonb',
+    default: () => "'{}'"
+  })
+  dailyPurchases: Record<string, number>
+
+  @Column({
+    type: 'bigint',
+    default: 0
+  })
+  lastPurchaseReset: number
+
   @CreateDateColumn({
     type: 'timestamp'
   })

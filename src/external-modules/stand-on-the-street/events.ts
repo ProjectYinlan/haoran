@@ -311,6 +311,8 @@ export function rollEvents(ctx: EventContext & {
   richNegativeBoost: number
   hasLuckyClover: boolean
   hasAmulet: boolean
+  coffeeDebuff?: number
+  paidStandNegativeBoost?: number
 }): RollEventsResult {
   const empty: RollEventsResult = { results: [], mergedEffect: { ...defaultEffect } }
   const isRich = ctx.balance > ctx.richBalanceThreshold
@@ -334,7 +336,7 @@ export function rollEvents(ctx: EventContext & {
 
   if (Math.random() > ctx.eventChance) return empty
 
-  let negativeBoost = 0
+  let negativeBoost = (ctx.coffeeDebuff ?? 0) * 0.15 + (ctx.paidStandNegativeBoost ?? 0)
   if (ctx.force) negativeBoost += ctx.forceNegativeBoost
   if (isRich) negativeBoost += ctx.richNegativeBoost
 
@@ -348,7 +350,8 @@ export function rollEvents(ctx: EventContext & {
 
   const results: RollEventResult[] = [first]
 
-  if (Math.random() < EXTRA_EVENT_CHANCE) {
+  const extraChance = Math.min(EXTRA_EVENT_CHANCE + (ctx.coffeeDebuff ?? 0) * 0.2, 0.95)
+  if (Math.random() < extraChance) {
     const second = pickOneEvent(available, negativeBoost, ctx, ctx.hasAmulet, new Set([first.event.id]))
     if (second) results.push(second)
   }

@@ -49,15 +49,9 @@ export type StandResultData = {
   events?: Array<{ name: string; description: string }>
   eventPenalty?: number
   itemEffects?: ItemEffectDetail[]
-  planInfo?: {
-    tier: string
-    dailyUsed: number
-    dailyLimit: number
-    weeklyUsed: number
-    weeklyLimit: number
-    sanctioned?: boolean
-    expiresAt?: number
-    refund?: number
+  paidStandInfo?: {
+    cost: number
+    count: number
   }
   boomerangReflect?: number
 }
@@ -81,7 +75,7 @@ export const StandResult = ({
   events: eventList,
   eventPenalty,
   itemEffects,
-  planInfo,
+  paidStandInfo,
   boomerangReflect,
 }: StandResultData) => {
   if (!friends || isUndefined(totalScore) || isUndefined(totalCount) || isUndefined(othersScore) || isUndefined(othersCount) || isUndefined(friendsScore) || isUndefined(balance) || isUndefined(totalVisits)) return null;
@@ -174,18 +168,11 @@ export const StandResult = ({
         </div>
       )}
 
-      {planInfo && (
-        <div className={`rounded-lg px-3 py-2 flex flex-col gap-1 text-xs ${planInfo.sanctioned ? 'bg-red-50 border border-red-200' : 'bg-slate-50 border border-slate-200'}`}>
-          <div className="flex items-center gap-2">
-            <CreditCard className={`w-3.5 h-3.5 shrink-0 ${planInfo.sanctioned ? 'text-red-500' : 'text-slate-500'}`} />
-            <span className={`font-medium ${planInfo.sanctioned ? 'text-red-600' : planInfo.tier === 'max' ? 'text-amber-600' : 'text-indigo-600'}`}>
-              {planInfo.tier === 'max' ? 'Plan Max' : 'Plan Pro'}
-            </span>
-            {planInfo.sanctioned
-              ? <span className="text-red-500">已被制裁！{planInfo.refund ? `退款 ${planInfo.refund}` : ''}</span>
-              : <span className="text-slate-500">日 {planInfo.dailyUsed}/{planInfo.dailyLimit} · 周 {planInfo.weeklyUsed}/{planInfo.weeklyLimit}</span>
-            }
-          </div>
+      {paidStandInfo && (
+        <div className="rounded-lg px-3 py-2 flex items-center gap-2 text-xs bg-violet-50 border border-violet-200">
+          <CreditCard className="w-3.5 h-3.5 shrink-0 text-violet-500" />
+          <span className="font-medium text-violet-600">加钱站街</span>
+          <span className="text-violet-500">第 {paidStandInfo.count} 次 · -{getShortNumberString(paidStandInfo.cost)}</span>
         </div>
       )}
 

@@ -12,7 +12,6 @@ import { StandInfo } from "./templates/StandInfo.js"
 import { StandRank } from "./templates/StandRank.js"
 import { StandShop } from "./templates/StandShop.js"
 import { StandBag } from "./templates/StandBag.js"
-import { StandBuy } from "./templates/StandBuy.js"
 import { randomUUID } from "crypto"
 import dayjs from "dayjs"
 import { sumBy, clamp } from "lodash-es"
@@ -27,11 +26,8 @@ import { createExternalModuleLogger } from "../../logger.js"
 import { configManager } from "../../config.js"
 import { readFile } from "fs/promises"
 import { rollEvents, type RollEventResult, type EventEffect, defaultEffect } from "./events.js"
-import { allItems, allBundles, getBundleItems, getBundleTotalPrice, bundleNameMap, getItemByName, type StandItem } from "./items.js"
-import { StandBundleBuy } from "./templates/StandBundleBuy.js"
-import { PLAN_TIERS, type PlanTier, getNext4AM, getLast4AM } from "./plans.js"
-import { StandPlanStatus } from "./templates/StandPlanStatus.js"
-import { StandPlanSub } from "./templates/StandPlanSub.js"
+import { allItems, allBundles, getBundleItems, getBundleTotalPrice, bundleNameMap, getItemByName, getItemById, parseItemsFromText, type StandItem, type ItemCategory } from "./items.js"
+import { getNext4AM, getLast4AM } from "./plans.js"
 
 const randomRange = (min: number, max: number) => {
   if (max <= min) return min
@@ -82,6 +78,7 @@ type StandOutcome = {
   }
   outList: Array<{ targetUserId: number, score: number }>
   boomerangReflect?: { targetId: number, amount: number }
+  guaranteedVisitorIds?: number[]
 }
 
 @Module('stand-on-the-street')
@@ -103,34 +100,74 @@ export default class StandOnTheStreetModule extends BaseCommand {
     })
   }
 
-  @NoPrefixCommand('站街', '进行随机站街')
-  @Usage('站街 [--force/-f]')
+  @RegexCommand(/^站街/, '进行随机站街')
+  @Usage('站街 [道具...]')
   @Permission('stand-on-the-street.work')
   @GroupOnly('该命令仅限群聊使用')
   async handleStand(
     @Message() message: EnhancedMessage,
-    @Args() args: string[],
     @Bot() bot: NCWebsocket,
   ) {
-    this.logger.debug(`用户${message.sender.user_id} 请求普通站街, args: ${JSON.stringify(args)}`)
-    const force = args.includes('--force') || args.includes('-f')
-    await this.executeStand(message, bot, 'random', force)
+    const rawText = message.message.filter(s => s.type === 'text').map(s => s.data.text).join('').trim()
+    const itemText = rawText.replace(/^站街\s*/, '')
+    const parsed = parseItemsFromText(itemText)
+    this.logger.debug(`用户${message.sender.user_id} 请求站街, 道具: ${parsed.items.map(i => i.name).join(',')}`)
+    await this.executeStand(message, bot, 'random', false, [], parsed.items)
   }
 
-  @NoPrefixCommand('强制站街', '进行强制站街')
-  @Usage('强制站街')
+  @RegexCommand(/^(加钱站街|强制站街)/, '付费站街')
+  @Usage('加钱站街 [道具...]')
   @Permission('stand-on-the-street.work')
   @GroupOnly('该命令仅限群聊使用')
-  async handleForce(
+  async handlePaidStand(
     @Message() message: EnhancedMessage,
     @Bot() bot: NCWebsocket,
   ) {
-    this.logger.debug(`用户${message.sender.user_id} 请求强制站街`)
-    await this.executeStand(message, bot, 'random', true)
+    if (standConfig?.enabled === false) {
+      await message.reply([Structs.text('站街模块未开启')])
+      return
+    }
+    if (message.message_type !== 'group') return
+    const userId = message.sender.user_id
+    const groupId = message.group_id
+    const scope = resolveScope(message)
+
+    const record = await this.standService.getOrCreateRecord(userId, groupId)
+    this.ensureDailyResets(record)
+
+    if (record.paidStandCount >= 1) {
+      await message.reply([Structs.text('今天的付费站街次数已用完（每天 1 次）')])
+      return
+    }
+
+    const PAID_STAND_COST = 1000
+    const balance = await this.vaultService.getTotalBalance(userId)
+    if (balance < PAID_STAND_COST) {
+      await message.reply([Structs.text(`余额不足，需要 ${PAID_STAND_COST}，当前 ${balance}`)])
+      return
+    }
+
+    await this.vaultService.applyBill({
+      userId,
+      change: -PAID_STAND_COST,
+      type: 'expense',
+      source: 'stand-on-the-street',
+      description: '加钱站街',
+      scope,
+    })
+
+    record.paidStandCount += 1
+    await this.standService.getRecordRepository().save(record)
+
+    const rawText = message.message.filter(s => s.type === 'text').map(s => s.data.text).join('').trim()
+    const itemText = rawText.replace(/^(加钱站街|强制站街)\s*/, '')
+    const parsed = parseItemsFromText(itemText)
+    this.logger.debug(`用户${userId} 加钱站街, 道具: ${parsed.items.map(i => i.name).join(',')}`)
+    await this.executeStand(message, bot, 'random', false, [], parsed.items, { paidStandCost: PAID_STAND_COST, paidStandCount: record.paidStandCount })
   }
 
   @RegexCommand(/^(炒|超|操)(\s+|$)/, '进行点名站街')
-  @Usage('操 @对方')
+  @Usage('操 @对方 [道具]')
   @Permission('stand-on-the-street.call')
   @GroupOnly('该命令仅限群聊使用')
   async handleCall(
@@ -138,8 +175,84 @@ export default class StandOnTheStreetModule extends BaseCommand {
     @Bot() bot: NCWebsocket,
     @At() atList: number[],
   ) {
-    this.logger.debug(`用户${message.sender.user_id} 请求点名站街, atList: ${JSON.stringify(atList)}`)
-    await this.executeStand(message, bot, 'call', false, atList)
+    const rawText = message.message.filter(s => s.type === 'text').map(s => s.data.text).join('').trim()
+    const itemText = rawText.replace(/^(炒|超|操)\s*/, '')
+    const parsed = parseItemsFromText(itemText)
+    this.logger.debug(`用户${message.sender.user_id} 请求点名, atList: ${JSON.stringify(atList)}, 道具: ${parsed.items.map(i => i.name).join(',')}`)
+    await this.executeStand(message, bot, 'call', false, atList, parsed.items)
+  }
+
+  @NoPrefixCommand('咖啡', '使用咖啡减少CD')
+  @Usage('咖啡')
+  @Permission('stand-on-the-street.shop')
+  @GroupOnly('该命令仅限群聊使用')
+  async handleCoffee(
+    @Message() message: EnhancedMessage,
+  ) {
+    if (standConfig?.enabled === false) {
+      await message.reply([Structs.text('站街模块未开启')])
+      return
+    }
+    if (message.message_type !== 'group') return
+    const userId = message.sender.user_id
+    const groupId = message.group_id
+    const scope = resolveScope(message)
+    const COFFEE_UNIT_PRICE = 400
+    const COFFEE_REDUCE_MS = 2 * 3600000
+
+    const record = await this.standService.getOrCreateRecord(userId, groupId)
+    this.ensureDailyResets(record)
+
+    if ((record.dailyPurchases?.['coffee'] ?? 0) >= 1) {
+      await message.reply([Structs.text('今天已经喝过咖啡了（每天 1 次）')])
+      return
+    }
+    if (!record.nextTime || record.nextTime.getTime() <= Date.now()) {
+      await message.reply([Structs.text('你当前没有 CD，不需要咖啡')])
+      return
+    }
+
+    const remainingMs = record.nextTime.getTime() - Date.now()
+    const dosesNeeded = Math.ceil(remainingMs / COFFEE_REDUCE_MS)
+    const balance = await this.vaultService.getTotalBalance(userId)
+    const maxAffordable = Math.floor(balance / COFFEE_UNIT_PRICE)
+
+    if (maxAffordable <= 0) {
+      await message.reply([Structs.text(`余额不足，至少需要 ${COFFEE_UNIT_PRICE}，当前 ${balance}`)])
+      return
+    }
+
+    const dosesUsed = Math.min(dosesNeeded, maxAffordable)
+    const totalCost = dosesUsed * COFFEE_UNIT_PRICE
+    const reducedMs = dosesUsed * COFFEE_REDUCE_MS
+    const cdCleared = dosesUsed >= dosesNeeded
+
+    await this.vaultService.applyBill({
+      userId,
+      change: -totalCost,
+      type: 'expense',
+      source: 'stand-on-the-street',
+      description: `咖啡 x${dosesUsed}`,
+      scope,
+    })
+
+    if (cdCleared) {
+      record.nextTime = null
+    } else {
+      record.nextTime = new Date(record.nextTime.getTime() - reducedMs)
+    }
+    record.coffeeDebuff = (record.coffeeDebuff ?? 0) + dosesUsed
+    record.coffeeDebuffExpiry = Date.now() + 2 * 24 * 3600000
+    record.dailyPurchases = { ...(record.dailyPurchases ?? {}), coffee: 1 }
+    await this.standService.getRecordRepository().save(record)
+
+    const newBalance = await this.vaultService.getTotalBalance(userId)
+    const debuffLevel = record.coffeeDebuff
+    const cdStatus = cdCleared
+      ? 'CD 已清除，可以站街了'
+      : `CD 减少 ${dosesUsed * 2}h，下次站街: ${formatTs(record.nextTime!)}`
+    await message.reply([Structs.text(`☕ 咖啡 x${dosesUsed}！${cdStatus}\n花费 ${totalCost}，余额 ${newBalance}\n咖啡副作用 Lv.${debuffLevel}（负面事件 +${Math.round(debuffLevel * 15)}%）`)])
+    this.logger.debug(`用户${userId} 使用咖啡 x${dosesUsed}, cost=${totalCost}, cleared=${cdCleared}, debuff=${debuffLevel}`)
   }
 
   @NoPrefixCommand('站街数据', '查询站街数据')
@@ -290,208 +403,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     await message.reply([Structs.image(image)])
   }
 
-  @RegexCommand(/^购买\s+/, '购买站街道具')
-  @Usage('购买 <道具名> [数量]')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handleBuy(
-    @Message() message: EnhancedMessage,
-    @Args() args: string[],
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const rawText = message.message
-      .filter(s => s.type === 'text')
-      .map(s => s.data.text)
-      .join('')
-      .trim()
-    const match = rawText.match(/^购买\s+(\S+?)(?:\s+(\d+))?$/)
-    if (!match) {
-      await message.reply([Structs.text('用法: 购买 <道具名> [数量]')])
-      return
-    }
-    const itemName = match[1]
-    const quantity = Math.max(parseInt(match[2] ?? '1', 10), 1)
-    const item = getItemByName(itemName)
-    if (!item) {
-      await message.reply([Structs.text(`没有找到名为「${itemName}」的道具`)])
-      return
-    }
-    const totalCost = item.price * quantity
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-    const scope = resolveScope(message)
-    const account = await this.vaultService.getOrCreateAccount(userId, scope)
-    if (Number(account.balance) < totalCost) {
-      await message.reply([Structs.text(`余额不足，需要 ${totalCost} 硬币，当前余额 ${account.balance}`)])
-      return
-    }
-    const merchantOrderId = randomUUID()
-    const billResult = await this.vaultService.applyBill({
-      userId,
-      change: -totalCost,
-      type: 'expense',
-      source: 'stand-on-the-street',
-      description: `站街商店 - 购买${item.name} x${quantity}`,
-      scope,
-      merchantOrderId,
-      merchantMeta: { type: 'shop_buy', itemId: item.id, quantity },
-    })
-    if (!billResult.ok) {
-      await message.reply([Structs.text('购买失败，请稍后重试')])
-      return
-    }
-    if (item.phase === 'instant') {
-      if (item.effect.cdReduceMs) {
-        const record = await this.standService.getOrCreateRecord(userId, groupId)
-        if (record.nextTime) {
-          const reduced = new Date(record.nextTime.getTime() - item.effect.cdReduceMs * quantity)
-          record.nextTime = reduced
-          await this.standService.getRecordRepository().save(record)
-          const now = new Date()
-          const cdReady = reduced.getTime() <= now.getTime()
-          const msg = cdReady
-            ? `购买成功！CD 已解除，现在可以站街了`
-            : `购买成功！CD 减少了 ${quantity * 2} 小时，下次站街: ${formatTs(reduced)}`
-          await message.reply([Structs.text(msg)])
-        } else {
-          await message.reply([Structs.text('你当前没有 CD，咖啡白喝了')])
-        }
-      }
-      this.logger.debug(`用户${userId} 购买即时道具 ${item.id} x${quantity} 花费${totalCost}`)
-      return
-    }
-
-    await this.standService.addInventoryItem(userId, groupId, item.id, quantity)
-    const inv = await this.standService.getInventoryItem(userId, groupId, item.id)
-    const ownedQuantity = inv?.quantity ?? quantity
-
-    const previousBalance = Number(account.balance)
-    const newBalance = Number(billResult.account.balance)
-    const nickname = message.sender.card || message.sender.nickname || String(userId)
-    const buyEl = StandBuy({
-      avatarUrl: getQQAvatarUrl(userId, 100),
-      nickname,
-      itemName: item.name,
-      itemDescription: item.description,
-      quantity,
-      unitPrice: item.price,
-      totalCost,
-      balance: newBalance,
-      previousBalance,
-      balanceChange: newBalance - previousBalance,
-      ownedQuantity,
-    })
-    if (buyEl) {
-      const image = await renderTemplate(buyEl, { width: 400, height: 'auto' })
-      await message.reply([Structs.image(image)])
-    }
-    this.logger.debug(`用户${userId} 购买 ${item.id} x${quantity} 花费${totalCost}`)
-  }
-
-  @RegexCommand(/^一键购买\s*/, '一键购买套餐')
-  @Usage('一键购买 <套餐名>')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handleBundleBuy(
-    @Message() message: EnhancedMessage,
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const rawText = message.message
-      .filter(s => s.type === 'text')
-      .map(s => s.data.text)
-      .join('')
-      .trim()
-    const match = rawText.match(/^一键购买\s*(\S+)?$/)
-    const bundleName = match?.[1]
-
-    if (!bundleName) {
-      const bundleInfos = allBundles.map(b => ({
-        name: b.name,
-        itemNames: getBundleItems(b).map(i => i.name),
-        totalPrice: getBundleTotalPrice(b),
-        serviceFee: b.serviceFee,
-      }))
-      const shopEl = StandShop({ items: allItems, bundles: bundleInfos })
-      if (shopEl) {
-        const image = await renderTemplate(shopEl, { width: 400, height: 'auto' })
-        await message.reply([Structs.image(image)])
-      }
-      return
-    }
-
-    const bundle = bundleNameMap.get(bundleName)
-    if (!bundle) {
-      await message.reply([Structs.text(`没有找到名为「${bundleName}」的套餐`)])
-      return
-    }
-
-    const items = getBundleItems(bundle)
-    const totalCost = getBundleTotalPrice(bundle)
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-    const scope = resolveScope(message)
-    const account = await this.vaultService.getOrCreateAccount(userId, scope)
-    const previousBalance = Number(account.balance)
-
-    if (previousBalance < totalCost) {
-      await message.reply([Structs.text(`余额不足，需要 ${totalCost} 硬币，当前余额 ${previousBalance}`)])
-      return
-    }
-
-    const hasInstant = items.some(i => i.phase === 'instant')
-    if (hasInstant) {
-      await message.reply([Structs.text('套餐中包含即时道具（如咖啡），请单独购买')])
-      return
-    }
-
-    const merchantOrderId = randomUUID()
-    const billResult = await this.vaultService.applyBill({
-      userId,
-      change: -totalCost,
-      type: 'expense',
-      source: 'stand-on-the-street',
-      description: `站街商店 - 一键购买${bundle.name}`,
-      scope,
-      merchantOrderId,
-      merchantMeta: { type: 'shop_bundle', bundleId: bundle.id, itemIds: bundle.itemIds },
-    })
-    if (!billResult.ok) {
-      await message.reply([Structs.text('购买失败，请稍后重试')])
-      return
-    }
-
-    for (const item of items) {
-      await this.standService.addInventoryItem(userId, groupId, item.id, 1)
-    }
-
-    const newBalance = Number(billResult.account.balance)
-    const nickname = message.sender.card || message.sender.nickname || String(userId)
-    const el = StandBundleBuy({
-      avatarUrl: getQQAvatarUrl(userId, 100),
-      nickname,
-      bundleName: bundle.name,
-      items: items.map(i => ({ name: i.name, price: i.price })),
-      serviceFee: bundle.serviceFee,
-      totalCost,
-      balance: newBalance,
-      previousBalance,
-    })
-    if (el) {
-      const image = await renderTemplate(el, { width: 400, height: 'auto' })
-      await message.reply([Structs.image(image)])
-    }
-    this.logger.debug(`用户${userId} 一键购买 ${bundle.id} 花费${totalCost}`)
-  }
-
-  @NoPrefixCommand('背包', '查看站街道具背包')
+  @NoPrefixCommand('背包', '查看站街状态')
   @Usage('背包')
   @Permission('stand-on-the-street.shop')
   @GroupOnly('该命令仅限群聊使用')
@@ -505,222 +417,43 @@ export default class StandOnTheStreetModule extends BaseCommand {
     if (message.message_type !== 'group') return
     const userId = message.sender.user_id
     const groupId = message.group_id
-    const inventory = await this.standService.getInventory(userId, groupId)
-    const bagItems = inventory
-      .filter(inv => inv.quantity > 0)
-      .map(inv => {
-        const itemDef = allItems.find(i => i.id === inv.itemId)
-        return {
-          name: itemDef?.name ?? inv.itemId,
-          description: itemDef?.description ?? '',
-          quantity: inv.quantity,
-        }
-      })
+    const record = await this.standService.getOrCreateRecord(userId, groupId)
+    this.ensureDailyResets(record)
+
+    const equipped = (record.equippedItems ?? [])
+      .map(id => getItemById(id))
+      .filter(Boolean) as StandItem[]
     const nickname = message.sender.card || message.sender.nickname || String(userId)
     const bagEl = StandBag({
       nickname,
       avatarUrl: getQQAvatarUrl(userId, 100),
-      items: bagItems,
+      items: [],
+      equippedItems: equipped.map(i => ({ name: i.name, description: i.description })),
+      coffeeDebuff: (record.coffeeDebuff ?? 0) > 0 && Date.now() < (record.coffeeDebuffExpiry ?? 0) ? record.coffeeDebuff : 0,
+      paidStandUsed: record.paidStandCount >= 1,
+      coffeeUsed: (record.dailyPurchases?.['coffee'] ?? 0) >= 1,
     })
     if (!bagEl) return
     const image = await renderTemplate(bagEl, { width: 400, height: 'auto', minHeight: 200 })
     await message.reply([Structs.image(image)])
   }
 
-  @RegexCommand(/^使用\s+/, '使用站街道具')
-  @Usage('使用 <道具名>')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handleUseItem(
-    @Message() message: EnhancedMessage,
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const rawText = message.message
-      .filter(s => s.type === 'text')
-      .map(s => s.data.text)
-      .join('')
-      .trim()
-    const match = rawText.match(/^使用\s+(\S+)$/)
-    if (!match) {
-      await message.reply([Structs.text('用法: 使用 <道具名>')])
-      return
-    }
-    const itemName = match[1]
-    const item = getItemByName(itemName)
-    if (!item) {
-      await message.reply([Structs.text(`没有找到名为「${itemName}」的道具`)])
-      return
-    }
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-    const inv = await this.standService.getInventoryItem(userId, groupId, item.id)
-    if (!inv || inv.quantity <= 0) {
-      await message.reply([Structs.text(`你没有「${item.name}」`)])
-      return
-    }
-    await message.reply([Structs.text(`「${item.name}」将在下次站街时自动生效，无需手动使用\n效果: ${item.description}`)])
-  }
-
-  @RegexCommand(/^站街plan\s+sub\s+/, '订阅站街Plan')
-  @Usage('站街plan sub <pro|max>')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handlePlanSub(
-    @Message() message: EnhancedMessage,
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const rawText = message.message
-      .filter(s => s.type === 'text')
-      .map(s => s.data.text)
-      .join('')
-      .trim()
-    const match = rawText.match(/^站街plan\s+sub\s+(pro|max)$/i)
-    if (!match) {
-      await message.reply([Structs.text('用法: 站街plan sub <pro|max>')])
-      return
-    }
-    const tier = match[1].toLowerCase() as PlanTier
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-    const tierDef = PLAN_TIERS[tier]
-
-    const scope = resolveScope(message)
-    const balance = await this.vaultService.getTotalBalance(userId)
-    if (balance < tierDef.price) {
-      await message.reply([Structs.text(`余额不足，${tierDef.name} 需要 ${tierDef.price}，当前余额 ${balance}`)])
-      return
-    }
-
-    const result = await this.standService.subscribePlan(userId, groupId, tier)
-    if (!result.ok) {
-      await message.reply([Structs.text(result.reason)])
-      return
-    }
-
-    await this.vaultService.applyBill({
-      userId,
-      change: -tierDef.price,
-      type: 'expense',
-      source: 'stand-on-the-street',
-      description: `站街 ${tierDef.name} 订阅`,
-      scope,
-    })
-
-    const newBalance = await this.vaultService.getTotalBalance(userId)
-    const plan = result.plan
-    const el = StandPlanSub({
-      avatarUrl: getQQAvatarUrl(userId, 100),
-      nickname: message.sender.card || message.sender.nickname || String(userId),
-      tier: plan.tier,
-      tierName: tierDef.name,
-      price: tierDef.price,
-      dailyLimit: tierDef.dailyLimit,
-      weeklyLimit: tierDef.weeklyLimit,
-      expiresAt: plan.expiresAt,
-      balance: newBalance,
-      previousBalance: balance,
-    })
-    const image = await renderTemplate(el, { width: 400, height: 'auto', minHeight: 200 })
-    await message.reply([Structs.image(image)])
-  }
-
-  @RegexCommand(/^站街plan\s+status$/, '查看站街Plan状态')
-  @Usage('站街plan status')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handlePlanStatus(
-    @Message() message: EnhancedMessage,
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-
-    const plan = await this.standService.getPlan(userId, groupId)
-    if (!plan) {
-      await message.reply([Structs.text('你没有订阅站街 Plan\n使用「站街plan sub pro/max」来订阅')])
-      return
-    }
-
-    const now = Date.now()
-    const tierDef = PLAN_TIERS[plan.tier as PlanTier]
-    await this.standService.ensurePlanResets(plan)
-
-    const isBanned = plan.bannedUntil !== null && now < plan.bannedUntil
-    const isExpired = now >= plan.expiresAt && !isBanned
-    const balance = await this.vaultService.getTotalBalance(userId)
-
-    const el = StandPlanStatus({
-      avatarUrl: getQQAvatarUrl(userId, 100),
-      nickname: message.sender.card || message.sender.nickname || String(userId),
-      tier: plan.tier,
-      tierName: tierDef?.name ?? plan.tier,
-      dailyUsed: plan.dailyUsed,
-      dailyLimit: tierDef?.dailyLimit ?? 0,
-      weeklyUsed: plan.weeklyUsed,
-      weeklyLimit: plan.weeklyLimit,
-      subscribedAt: plan.subscribedAt,
-      expiresAt: plan.expiresAt,
-      bannedUntil: plan.bannedUntil,
-      isBanned,
-      isExpired,
-      balance,
-    })
-    const image = await renderTemplate(el, { width: 400, height: 'auto', minHeight: 200 })
-    await message.reply([Structs.image(image)])
-  }
-
-  @RegexCommand(/^站街plan\s+unsub$/, '退订站街Plan')
-  @Usage('站街plan unsub')
-  @Permission('stand-on-the-street.shop')
-  @GroupOnly('该命令仅限群聊使用')
-  async handlePlanUnsub(
-    @Message() message: EnhancedMessage,
-  ) {
-    if (standConfig?.enabled === false) {
-      await message.reply([Structs.text('站街模块未开启')])
-      return
-    }
-    if (message.message_type !== 'group') return
-    const userId = message.sender.user_id
-    const groupId = message.group_id
-
-    const result = await this.standService.unsubscribePlan(userId, groupId)
-    if (!result.ok) {
-      await message.reply([Structs.text(result.reason)])
-      return
-    }
-
-    if (result.refund > 0) {
-      await this.vaultService.applyBill({
-        userId,
-        change: result.refund,
-        type: 'income',
-        source: 'stand-on-the-street',
-        description: '站街 Plan 退订退款',
-        scope: resolveScope(message),
-      })
-      await message.reply([Structs.text(`Plan 已退订，退款 ${result.refund}`)])
-    } else {
-      await message.reply([Structs.text('Plan 已退订')])
-    }
-  }
-
   private getRecentAvg(record: StandRecord) {
     const recentScores = (record.into ?? []).slice(-5).map(item => Number(item.score) || 0).filter(Boolean)
     if (recentScores.length === 0) return 0
     return recentScores.reduce((acc, curr) => acc + curr, 0) / recentScores.length
+  }
+
+  private ensureDailyResets(record: StandRecord) {
+    const last4AM = getLast4AM()
+    if ((record.lastPaidReset ?? 0) < last4AM) {
+      record.paidStandCount = 0
+      record.lastPaidReset = last4AM
+    }
+    if ((record.lastPurchaseReset ?? 0) < last4AM) {
+      record.dailyPurchases = {}
+      record.lastPurchaseReset = last4AM
+    }
   }
 
   private getRecentPerCapitaAvg(record: StandRecord) {
@@ -783,19 +516,6 @@ export default class StandOnTheStreetModule extends BaseCommand {
     return { canProceed: true, force }
   }
 
-  private async resolveActiveItems(userId: number, groupId: number) {
-    const inventory = await this.standService.getInventory(userId, groupId)
-    const active: { item: StandItem, invItemId: string }[] = []
-    for (const inv of inventory) {
-      if (inv.quantity <= 0) continue
-      const itemDef = allItems.find(i => i.id === inv.itemId)
-      if (itemDef) {
-        active.push({ item: itemDef, invItemId: inv.itemId })
-      }
-    }
-    return active
-  }
-
   private async buildRandomOutcome(
     bot: NCWebsocket,
     groupId: number,
@@ -835,7 +555,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
     friendsCount = Math.max(0, Math.round(friendsCount * eventEffect.friendsCountMultiplier))
     const othersCountMax = friendsCount > totalCountMax ? 0 : totalCountMax - friendsCount
     let othersCount = othersCountMax > 0 ? randomRange(0, othersCountMax) : 0
-    othersCount = Math.max(0, Math.round(othersCount * eventEffect.othersCountMultiplier * itemOthersMultiplier))
+    othersCount = Math.min(50, Math.max(0, Math.round(othersCount * eventEffect.othersCountMultiplier * itemOthersMultiplier)))
 
     const candidateIds = memberIds.filter(id => id !== userId)
     const records = await this.standService.getRecordsByUserIds(candidateIds, groupId)
@@ -901,11 +621,12 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }
 
     picked.forEach(friendId => {
-      const score = rollScore(6)
-      this.logger.debug(`好友${friendId} 收益: ${score}`)
+      const isGuaranteed = guaranteedVisitors.includes(friendId)
+      const score = isGuaranteed ? 0 : rollScore(6)
+      this.logger.debug(`好友${friendId} 收益: ${score}${isGuaranteed ? ' (红包白嫖)' : ''}`)
       friendsScore += score
       friends.push({ qq: friendId, score })
-      outList.push({ targetUserId: friendId, score })
+      if (score > 0) outList.push({ targetUserId: friendId, score })
     })
 
     let othersScore = 0
@@ -927,6 +648,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
         friends,
       },
       outList,
+      guaranteedVisitorIds: guaranteedVisitors.length > 0 ? guaranteedVisitors : undefined,
     }
   }
 
@@ -954,9 +676,14 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }
     const targetId = atList[0]
 
-    const targetHasSpray = await this.standService.getInventoryItem(targetId, groupId, 'pepper_spray')
-    if (targetHasSpray && targetHasSpray.quantity > 0) {
-      await this.standService.consumeInventoryItem(targetId, groupId, 'pepper_spray')
+    const targetRecord_ = await this.standService.getRecord(targetId, groupId)
+    const targetEquipped = targetRecord_?.equippedItems ?? []
+    if (targetEquipped.includes('pepper_spray')) {
+      const updatedEquipped = targetEquipped.filter((id: string) => id !== 'pepper_spray')
+      if (targetRecord_) {
+        targetRecord_.equippedItems = updatedEquipped
+        await this.standService.getRecordRepository().save(targetRecord_)
+      }
       await message.reply([Structs.text(`对方使用了「防狼喷雾」，你被喷了一脸！点名失败。`)])
       this.logger.debug(`点名被防狼喷雾挡住 targetId=${targetId}`)
       return null
@@ -988,10 +715,13 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const score = step * 50
     this.logger.debug(`点名模式 targetId=${targetId} step=${step} score=${score}`)
 
-    const targetHasBoomerang = await this.standService.getInventoryItem(targetId, groupId, 'boomerang')
     let boomerangReflect: StandOutcome['boomerangReflect'] = undefined
-    if (targetHasBoomerang && targetHasBoomerang.quantity > 0) {
-      await this.standService.consumeInventoryItem(targetId, groupId, 'boomerang')
+    if (targetEquipped.includes('boomerang')) {
+      const updatedEquipped = (targetRecord_?.equippedItems ?? []).filter((id: string) => id !== 'boomerang')
+      if (targetRecord_) {
+        targetRecord_.equippedItems = updatedEquipped
+        await this.standService.getRecordRepository().save(targetRecord_)
+      }
       boomerangReflect = { targetId, amount: score }
       this.logger.debug(`回旋镖生效 targetId=${targetId} reflect=${score}`)
     }
@@ -1014,8 +744,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     type: StandMode,
     force: boolean,
     atList: number[] = [],
+    inlineItems: StandItem[] = [],
+    paidStandInfo?: { paidStandCost: number, paidStandCount: number },
   ) {
-    const result = await this.executeStandOnce(message, bot, type, force, atList)
+    const result = await this.executeStandOnce(message, bot, type, force, atList, inlineItems, paidStandInfo)
     if (!result) return
     const resultEl = StandResult(result.standResultData)
     if (!resultEl) {
@@ -1033,8 +765,10 @@ export default class StandOnTheStreetModule extends BaseCommand {
     type: StandMode,
     force: boolean,
     atList: number[] = [],
+    inlineItems: StandItem[] = [],
+    paidStandInfo?: { paidStandCost: number, paidStandCount: number },
   ) {
-    this.logger.debug(`执行站街 type=${type} userId=${message.sender.user_id} force=${force} atList=${JSON.stringify(atList)}`)
+    this.logger.debug(`执行站街 type=${type} userId=${message.sender.user_id} force=${force} items=${inlineItems.map(i => i.name).join(',')} atList=${JSON.stringify(atList)}`)
     if (standConfig?.enabled === false) {
       await message.reply([Structs.text('站街模块未开启')])
       this.logger.warn(`执行站街: 站街模块未开启`)
@@ -1050,45 +784,106 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const dayTs = getLast4AM(ts)
 
     const record = await this.standService.getOrCreateRecord(userId, groupId)
+    this.ensureDailyResets(record)
+
+    if (type === 'call') {
+      const dailyCalls = record.dailyPurchases?.['_call_count'] ?? 0
+      if (dailyCalls >= 2 && configManager.config.devMode !== true) {
+        await message.reply([Structs.text('今天的点名次数已用完（每天 2 次）')])
+        this.logger.debug(`点名中断: 今日已用 ${dailyCalls}/2`)
+        return
+      }
+    }
+
     this.logger.debug(`当前用户历史状态: ${JSON.stringify({
       score: record.score,
       countFriends: record.countFriends,
       countOthers: record.countOthers,
       statsInto: record.statsInto,
-      cd: record.nextTime ? formatTs(record.nextTime) : null
+      cd: record.nextTime ? formatTs(record.nextTime) : null,
+      coffeeDebuff: record.coffeeDebuff ?? 0,
     })}`)
 
-    let usedPlan = false
+    const isPaidStand = !!paidStandInfo
     const cooldownResult = await this.resolveCooldown(message, record, ts, force)
-    if (!cooldownResult.canProceed) {
-      const plan = await this.standService.getActivePlan(userId, groupId)
-      if (plan) {
-        const planDef = PLAN_TIERS[plan.tier as keyof typeof PLAN_TIERS]
-        await this.standService.ensurePlanResets(plan)
-        if (plan.dailyUsed < planDef.dailyLimit && plan.weeklyUsed < planDef.weeklyLimit) {
-          usedPlan = true
-          this.logger.debug(`Plan ${plan.tier} 绕过CD，日 ${plan.dailyUsed + 1}/${planDef.dailyLimit} 周 ${plan.weeklyUsed + 1}/${planDef.weeklyLimit}`)
-        } else if (configManager.config.devMode === true) {
-          this.logger.debug(`Plan 额度用完但 devMode 放行`)
-        } else {
-          const nextTime = record.nextTime ? formatTs(record.nextTime) : '未知'
-          const nextReset = formatTs(getNext4AM())
-          const weeklyFull = plan.weeklyUsed >= planDef.weeklyLimit
-          const reason = weeklyFull ? `周额度已用完 (${plan.weeklyUsed}/${planDef.weeklyLimit})` : `日额度已用完 (${plan.dailyUsed}/${planDef.dailyLimit})`
-          await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n基础站街: ${nextTime}\nPlan ${reason}\nPlan 日额度重置: ${nextReset}`)])
-          this.logger.debug(`站街中断: CD未到，Plan额度用完`)
-          return
-        }
-      } else if (configManager.config.devMode === true) {
-        this.logger.debug(`无Plan但 devMode 放行`)
+    if (!cooldownResult.canProceed && !isPaidStand) {
+      if (configManager.config.devMode === true) {
+        this.logger.debug(`devMode 放行`)
       } else {
         const nextTime = record.nextTime ? formatTs(record.nextTime) : '未知'
-        await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n下次站街: ${nextTime}\n订阅Plan可在CD期间额外站街`)])
-        this.logger.debug(`站街中断: CD未到，无Plan可用`)
+        this.ensureDailyResets(record)
+        const paidAvail = record.paidStandCount < 1
+        const coffeeAvail = (record.dailyPurchases?.['coffee'] ?? 0) < 1
+        const remainMs = record.nextTime ? record.nextTime.getTime() - Date.now() : 0
+        const coffeeDoses = remainMs > 0 ? Math.ceil(remainMs / (2 * 3600000)) : 0
+        const coffeeCost = coffeeDoses * 400
+        const hints: string[] = []
+        if (paidAvail) hints.push('「加钱站街」(1000)')
+        if (coffeeAvail && coffeeDoses > 0) hints.push(`「咖啡」(${coffeeCost}, ${coffeeDoses}杯)`)
+        const hintStr = hints.length > 0
+          ? `\n可用: ${hints.join(' / ')}`
+          : ''
+        await message.reply([Structs.text(`${randomArrayElem(standTexts.many)}\n下次站街: ${nextTime}${hintStr}`)])
+        this.logger.debug(`站街中断: CD未到`)
         return
       }
     }
     force = cooldownResult.force
+
+    const validItems = inlineItems.filter(i => {
+      if (i.category === 'instant') return false
+      if (type === 'call' && i.category === 'active') return false
+      if (type === 'random' && i.category === 'call') return false
+      return true
+    })
+
+    let itemCost = 0
+    const dailyLimitErrors: string[] = []
+    for (const item of validItems) {
+      const todayUsed = record.dailyPurchases?.[item.id] ?? 0
+      if (todayUsed >= item.dailyBuyLimit) {
+        dailyLimitErrors.push(`${item.name}（今日已用 ${todayUsed}/${item.dailyBuyLimit}）`)
+        continue
+      }
+      itemCost += item.price
+    }
+    const usableItems = validItems.filter(i => {
+      const todayUsed = record.dailyPurchases?.[i.id] ?? 0
+      return todayUsed < i.dailyBuyLimit
+    })
+
+    if (dailyLimitErrors.length > 0) {
+      this.logger.debug(`道具日限制: ${dailyLimitErrors.join(', ')}`)
+    }
+
+    if (itemCost > 0) {
+      const balance = await this.vaultService.getTotalBalance(userId)
+      if (balance < itemCost) {
+        await message.reply([Structs.text(`道具费用不足，需要 ${itemCost}，当前 ${balance}`)])
+        return
+      }
+      await this.vaultService.applyBill({
+        userId,
+        change: -itemCost,
+        type: 'expense',
+        source: 'stand-on-the-street',
+        description: `站街道具 ${usableItems.map(i => i.name).join('+')}`,
+        scope,
+      })
+      for (const item of usableItems) {
+        record.dailyPurchases = {
+          ...(record.dailyPurchases ?? {}),
+          [item.id]: (record.dailyPurchases?.[item.id] ?? 0) + 1,
+        }
+      }
+    }
+
+    const passiveItems = usableItems.filter(i => i.category === 'passive')
+    if (passiveItems.length > 0) {
+      record.equippedItems = passiveItems.map(i => i.id)
+      this.logger.debug(`装备被动道具: ${passiveItems.map(i => i.name).join(',')}`)
+    }
+    await this.standService.getRecordRepository().save(record)
 
     const cooldownHours = standConfig?.cooldownHours ?? 12
     const forceExtraHours = standConfig?.forceExtraHours ?? 18
@@ -1116,14 +911,17 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const originalBalance = Number(account.balance)
     let latestBalance = originalBalance
 
-    const activeItems = await this.resolveActiveItems(userId, groupId)
-    const hasAmulet = activeItems.some(a => a.item.effect.amulet)
-    const hasLuckyClover = activeItems.some(a => a.item.effect.luckyClover)
-    const billboardItem = activeItems.find(a => a.item.id === 'billboard')
+    const hasAmulet = usableItems.some(i => i.effect.amulet)
+    const hasLuckyClover = usableItems.some(i => i.effect.luckyClover)
+    const billboardItem = usableItems.find(i => i.id === 'billboard')
     const hasBillboard = !!billboardItem
-    const hasInsurance = activeItems.some(a => a.item.effect.insurance)
-    const hasVipCard = activeItems.some(a => a.item.effect.cdMultiplier && a.item.effect.cdMultiplier < 1)
+    const hasInsurance = usableItems.some(i => i.effect.insurance)
+    const hasVipCard = usableItems.some(i => i.effect.cdMultiplier && i.effect.cdMultiplier < 1)
     const itemEffectDetails: Array<{ itemName: string, description: string }> = []
+
+    if (usableItems.length > 0) {
+      itemEffectDetails.push({ itemName: '道具', description: `${usableItems.map(i => i.name).join(' + ')}（-${itemCost}）` })
+    }
 
     const eventsResult = type === 'random'
       ? rollEvents({
@@ -1136,40 +934,23 @@ export default class StandOnTheStreetModule extends BaseCommand {
           richNegativeBoost,
           hasLuckyClover,
           hasAmulet,
+          coffeeDebuff: (record.coffeeDebuff ?? 0) > 0 && Date.now() < (record.coffeeDebuffExpiry ?? 0) ? record.coffeeDebuff : 0,
         })
       : { results: [], mergedEffect: { ...defaultEffect } }
 
     const eventEffect: EventEffect = eventsResult.mergedEffect
     const eventResults = eventsResult.results
     const eventNames = eventResults.map(r => r.event.name)
-    const eventDescs = eventResults.map(r => r.event.description)
 
-    const consumedItems: string[] = []
-    if (type === 'random') {
-      if (hasLuckyClover) {
-        await this.standService.consumeInventoryItem(userId, groupId, 'lucky_clover')
-        consumedItems.push('幸运草')
-        itemEffectDetails.push({ itemName: '幸运草', description: `触发正面事件「${eventNames[0] ?? '???'}」` })
-      }
-      if (hasAmulet) {
-        await this.standService.consumeInventoryItem(userId, groupId, 'amulet')
-        consumedItems.push('护身符')
-        itemEffectDetails.push({
-          itemName: '护身符',
-          description: eventResults.length === 0 ? '已消耗（可能阻挡了负面事件）' : '已消耗（本次事件非负面）',
-        })
-      }
-    }
-
-    this.logger.debug(`事件结果: ${eventNames.length > 0 ? eventNames.join(' + ') : '无事件'}, effect=${JSON.stringify(eventEffect)}, 消耗道具=${JSON.stringify(consumedItems)}`)
+    this.logger.debug(`事件结果: ${eventNames.length > 0 ? eventNames.join(' + ') : '无事件'}, effect=${JSON.stringify(eventEffect)}`)
     this.logger.debug(`权重计算: recentAvg=${recentAvg}, recentPerCapitaAvg=${recentPerCapitaAvg}, lowAvgBoost=${lowAvgBoost}, basePayWeight=${basePayWeight}, highPayBaseWeight=${highPayBaseWeight}`)
 
     let outcome: StandOutcome | null = null
 
-    const minTotalCount = hasBillboard ? (billboardItem!.item.effect.minTotalCount ?? 0) : 0
-    const megaphoneItem = activeItems.find(a => a.item.effect.othersCountMultiplier)
-    const itemOthersMultiplier = megaphoneItem?.item.effect.othersCountMultiplier ?? 1
-    const redEnvelopeItem = activeItems.find(a => a.item.effect.redEnvelope)
+    const minTotalCount = hasBillboard ? (billboardItem!.effect.minTotalCount ?? 0) : 0
+    const megaphoneItem = usableItems.find(i => i.effect.othersCountMultiplier)
+    const itemOthersMultiplier = megaphoneItem?.effect.othersCountMultiplier ?? 1
+    const redEnvelopeItem = usableItems.find(i => i.effect.redEnvelope)
 
     if (type === 'random') {
       outcome = await this.buildRandomOutcome(
@@ -1204,12 +985,21 @@ export default class StandOnTheStreetModule extends BaseCommand {
       this.logger.debug(`没有可用 outcome，站街终止。`)
       return
     }
+
+    if (type === 'call') {
+      record.dailyPurchases = {
+        ...(record.dailyPurchases ?? {}),
+        _call_count: (record.dailyPurchases?.['_call_count'] ?? 0) + 1,
+      }
+      await this.standService.getRecordRepository().save(record)
+    }
+
     let { intoDetail, outList } = outcome
 
-    const pillItem = activeItems.find(a => a.item.effect.callExtraRounds)
+    const pillItem = usableItems.find(i => i.effect.callExtraRounds)
     let callRoundScores: number[] | null = null
     if (type === 'call' && pillItem && outcome) {
-      const [minExtra, maxExtra] = pillItem.item.effect.callExtraRounds!
+      const [minExtra, maxExtra] = pillItem.effect.callExtraRounds!
       const extraRounds = minExtra + Math.floor(Math.random() * (maxExtra - minExtra + 1))
       callRoundScores = [intoDetail.score]
       for (let i = 0; i < extraRounds; i++) {
@@ -1220,8 +1010,6 @@ export default class StandOnTheStreetModule extends BaseCommand {
         if (intoDetail.friends[0]) intoDetail.friends[0].score += roundScore
         if (outList[0]) outList[0].score += roundScore
       }
-      await this.standService.consumeInventoryItem(userId, groupId, pillItem.invItemId)
-      consumedItems.push('小药丸')
       const totalRounds = 1 + extraRounds
       const roundsStr = callRoundScores.map(s => String(s)).join(' + ')
       itemEffectDetails.push({
@@ -1255,18 +1043,14 @@ export default class StandOnTheStreetModule extends BaseCommand {
 
     if (hasInsurance && finalScore === 0 && recentAvg > 0) {
       finalScore = Math.round(recentAvg)
-      await this.standService.consumeInventoryItem(userId, groupId, 'insurance')
-      consumedItems.push('保险')
       itemEffectDetails.push({ itemName: '保险', description: `零收入赔偿 → ${finalScore} 硬币` })
       this.logger.debug(`保险生效，赔偿平均收入 ${finalScore}`)
     }
 
     if (hasBillboard && billboardItem) {
       const scoreBefore = finalScore
-      const multiplier = billboardItem.item.effect.incomeMultiplier ?? 1
+      const multiplier = billboardItem.effect.incomeMultiplier ?? 1
       finalScore = Math.round(finalScore * multiplier)
-      await this.standService.consumeInventoryItem(userId, groupId, billboardItem.invItemId)
-      consumedItems.push('广告牌')
       const parts = [`收入 ${scoreBefore} → ${finalScore} (x${multiplier})`]
       if (minTotalCount > 0) parts.push(`保底 ${minTotalCount} 人`)
       itemEffectDetails.push({ itemName: '广告牌', description: parts.join('，') })
@@ -1274,42 +1058,42 @@ export default class StandOnTheStreetModule extends BaseCommand {
     }
 
     if (megaphoneItem && type === 'random') {
-      await this.standService.consumeInventoryItem(userId, groupId, megaphoneItem.invItemId)
-      consumedItems.push('喇叭')
       itemEffectDetails.push({ itemName: '喇叭', description: `路人数量 x${itemOthersMultiplier}` })
       this.logger.debug(`喇叭生效，路人数量 x${itemOthersMultiplier}`)
     }
 
-    const highHeelsItem = activeItems.find(a => a.item.id === 'high_heels')
+    const highHeelsItem = usableItems.find(i => i.id === 'high_heels')
     if (highHeelsItem && type === 'random') {
       const scoreBefore = finalScore
-      const mult = highHeelsItem.item.effect.incomeMultiplier ?? 2
+      const mult = highHeelsItem.effect.incomeMultiplier ?? 2
       finalScore = Math.round(finalScore * mult)
-      await this.standService.consumeInventoryItem(userId, groupId, highHeelsItem.invItemId)
-      consumedItems.push('高跟鞋')
       itemEffectDetails.push({ itemName: '高跟鞋', description: `收入 ${scoreBefore} → ${finalScore} (x${mult})，CD x1.5` })
       this.logger.debug(`高跟鞋生效，收入 x${mult}`)
     }
 
     let redEnvelopeCost = 0
     if (redEnvelopeItem && type === 'random' && intoDetail.friends.length > 0) {
-      const perFriend = redEnvelopeItem.item.effect.redEnvelope ?? 50
-      redEnvelopeCost = perFriend * intoDetail.friends.length
-      await this.vaultService.applyBill({
-        userId,
-        change: -redEnvelopeCost,
-        type: 'expense',
-        source: 'stand-on-the-street',
-        description: `站街红包 x${intoDetail.friends.length}`,
-        scope,
-        allowNegative: true,
-      })
-      await this.standService.consumeInventoryItem(userId, groupId, redEnvelopeItem.invItemId)
-      consumedItems.push('红包')
-      const guaranteedIds = intoDetail.friends.map((f: StandFriend) => f.qq)
-      ;(intoDetail as any).guaranteedVisitors = guaranteedIds
-      itemEffectDetails.push({ itemName: '红包', description: `给 ${intoDetail.friends.length} 位群友发了 ${perFriend}（共 ${redEnvelopeCost}），他们下次必来` })
-      this.logger.debug(`红包生效，发了 ${redEnvelopeCost} 给 ${guaranteedIds.length} 人`)
+      const perFriend = redEnvelopeItem.effect.redEnvelope ?? 50
+      const prevGuaranteed = new Set(outcome?.guaranteedVisitorIds ?? [])
+      const newFriends = intoDetail.friends.filter((f: StandFriend) => !prevGuaranteed.has(f.qq))
+      if (newFriends.length > 0) {
+        redEnvelopeCost = perFriend * newFriends.length
+        await this.vaultService.applyBill({
+          userId,
+          change: -redEnvelopeCost,
+          type: 'expense',
+          source: 'stand-on-the-street',
+          description: `站街红包 x${newFriends.length}`,
+          scope,
+          allowNegative: true,
+        })
+        const guaranteedIds = newFriends.map((f: StandFriend) => f.qq)
+        ;(intoDetail as any).guaranteedVisitors = guaranteedIds
+        itemEffectDetails.push({ itemName: '红包', description: `给 ${newFriends.length} 位新群友发了 ${perFriend}（共 ${redEnvelopeCost}），他们下次必来` })
+        this.logger.debug(`红包生效，发了 ${redEnvelopeCost} 给 ${guaranteedIds.length} 新人（排除 ${prevGuaranteed.size} 旧保底）`)
+      } else {
+        itemEffectDetails.push({ itemName: '红包', description: '没有新群友可发红包（全是保底白嫖客）' })
+      }
     }
 
     const displayRatio = rawTotalScore > 0 ? finalScore / rawTotalScore : 0
@@ -1324,20 +1108,18 @@ export default class StandOnTheStreetModule extends BaseCommand {
 
     let cdMultiplier = eventEffect.cdMultiplier
     if (hasVipCard) {
-      const vipItem = activeItems.find(a => a.item.effect.cdMultiplier && a.item.effect.cdMultiplier < 1)
+      const vipItem = usableItems.find(i => i.effect.cdMultiplier && i.effect.cdMultiplier < 1)
       if (vipItem) {
         const cdBefore = cdMultiplier
-        cdMultiplier *= (vipItem.item.effect.cdMultiplier ?? 1)
-        await this.standService.consumeInventoryItem(userId, groupId, vipItem.invItemId)
-        consumedItems.push('贵宾卡')
+        cdMultiplier *= (vipItem.effect.cdMultiplier ?? 1)
         const cdHoursBefore = Math.round((standConfig?.cooldownHours ?? 12) * cdBefore * 10) / 10
         const cdHoursAfter = Math.round((standConfig?.cooldownHours ?? 12) * cdMultiplier * 10) / 10
         itemEffectDetails.push({ itemName: '贵宾卡', description: `CD ${cdHoursBefore}h → ${cdHoursAfter}h` })
-        this.logger.debug(`贵宾卡生效，CD乘以 ${vipItem.item.effect.cdMultiplier}`)
+        this.logger.debug(`贵宾卡生效，CD乘以 ${vipItem.effect.cdMultiplier}`)
       }
     }
-    if (highHeelsItem) {
-      cdMultiplier *= (highHeelsItem.item.effect.cdMultiplier ?? 1.5)
+    if (highHeelsItem && type === 'random') {
+      cdMultiplier *= (highHeelsItem.effect.cdMultiplier ?? 1.5)
     }
 
     let eventPenalty = eventEffect.flatPenalty
@@ -1345,8 +1127,11 @@ export default class StandOnTheStreetModule extends BaseCommand {
     const per = totalCount > 0 ? Math.ceil(intoDetail.score / totalCount) : 0
     this.logger.debug(`站街收益 outcome: score=${intoDetail.score}, outList=${JSON.stringify(outList)} totalPer=${per}`)
 
-    if (usedPlan) {
-      await this.standService.incrementPlanUsage(userId, groupId)
+    if ((record.coffeeDebuff ?? 0) > 0 && Date.now() >= (record.coffeeDebuffExpiry ?? 0)) {
+      record.coffeeDebuff = 0
+      record.coffeeDebuffExpiry = 0
+      await this.standService.getRecordRepository().save(record)
+      this.logger.debug(`咖啡debuff已过期，已清除`)
     }
 
     let incomeAccountBalance = latestBalance - boomerangAmount - redEnvelopeCost
@@ -1485,6 +1270,14 @@ export default class StandOnTheStreetModule extends BaseCommand {
 
       for (const item of outList) {
         const targetId = item.targetUserId
+        const targetBalance = await this.vaultService.getTotalBalance(targetId)
+        if (targetBalance <= 0) {
+          this.logger.debug(`用户${targetId} 余额<=0，白嫖跳过扣款`)
+          const targetRecord = await getOrCreateRecordWithRepo(targetId)
+          targetRecord.out = [...(targetRecord.out ?? []), { qq: userId, score: 0, ts }]
+          await recordRepo.save(targetRecord)
+          continue
+        }
         const targetRecord = await getOrCreateRecordWithRepo(targetId)
         targetRecord.score = Number(targetRecord.score) - item.score
         targetRecord.statsOut = Number(targetRecord.statsOut) + item.score
@@ -1502,7 +1295,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
           scope,
           merchantOrderId,
           merchantMeta: { type: 'stand_expense', groupId, fromUserId: userId },
-          allowNegative: true,
+          allowNegative: false,
           manager,
         })
         if (billResult.ok) {
@@ -1517,70 +1310,13 @@ export default class StandOnTheStreetModule extends BaseCommand {
           }))
           this.logger.debug(`用户${targetId} 扣款成功 ${item.score}`)
         } else {
-          this.logger.warn(`用户${targetId} 扣款失败`)
+          this.logger.warn(`用户${targetId} 扣款失败（余额不足）`)
         }
       }
     })
 
-    let planSanctioned = false
-    if (usedPlan) {
-      const plan = await this.standService.getActivePlan(userId, groupId)
-      if (plan) {
-        const planDef = PLAN_TIERS[plan.tier as keyof typeof PLAN_TIERS]
-        planSanctioned = Math.random() < planDef.sanctionChance
-        if (planSanctioned) {
-          const refund = Math.floor((plan.weeklyLimit - plan.weeklyUsed) / plan.weeklyLimit * planDef.price * 0.6)
-          await this.standService.sanctionPlan(userId, groupId, refund)
-          if (refund > 0) {
-            await this.vaultService.applyBill({
-              userId,
-              change: refund,
-              type: 'income',
-              source: 'stand-on-the-street',
-              description: `站街 Plan 制裁退款`,
-              scope,
-            })
-          }
-          this.logger.debug(`Plan ${plan.tier} 被制裁！退款 ${refund}`)
-        } else {
-          this.logger.debug(`Plan ${plan.tier} 使用成功，未被制裁`)
-        }
-      }
-    }
-
     const balanceIncome = intoDetail.score + eventEffect.flatBonus
-    let balanceExpense = eventPenaltyApplied + boomerangAmount + redEnvelopeCost
-
-    let planInfo: { tier: string, dailyUsed: number, dailyLimit: number, weeklyUsed: number, weeklyLimit: number, sanctioned?: boolean, expiresAt?: number, refund?: number } | undefined
-    if (planSanctioned) {
-      const sanctionedPlan = await this.standService.getPlan(userId, groupId)
-      const sDef = sanctionedPlan ? PLAN_TIERS[sanctionedPlan.tier as keyof typeof PLAN_TIERS] : null
-      const refund = sanctionedPlan && sDef
-        ? Math.floor((sanctionedPlan.weeklyLimit - sanctionedPlan.weeklyUsed) / sanctionedPlan.weeklyLimit * sDef.price * 0.6)
-        : 0
-      planInfo = {
-        tier: sanctionedPlan?.tier ?? 'unknown',
-        dailyUsed: 0,
-        dailyLimit: sDef?.dailyLimit ?? 0,
-        weeklyUsed: 0,
-        weeklyLimit: sDef?.weeklyLimit ?? 0,
-        sanctioned: true,
-        refund,
-      }
-    } else {
-      const plan = await this.standService.getActivePlan(userId, groupId)
-      if (plan) {
-        const planDef = PLAN_TIERS[plan.tier as keyof typeof PLAN_TIERS]
-        planInfo = {
-          tier: plan.tier,
-          dailyUsed: plan.dailyUsed,
-          dailyLimit: planDef.dailyLimit,
-          weeklyUsed: plan.weeklyUsed,
-          weeklyLimit: planDef.weeklyLimit,
-          expiresAt: plan.expiresAt,
-        }
-      }
-    }
+    let balanceExpense = eventPenaltyApplied + boomerangAmount + redEnvelopeCost + itemCost + (paidStandInfo?.paidStandCost ?? 0)
 
     const standResultData = {
       avatarUrl: getQQAvatarUrl(userId, 100),
@@ -1604,7 +1340,7 @@ export default class StandOnTheStreetModule extends BaseCommand {
       events: eventResults.map(r => ({ name: r.event.name, description: r.event.description })),
       eventPenalty: eventPenaltyApplied > 0 ? eventPenaltyApplied : undefined,
       itemEffects: itemEffectDetails.length > 0 ? itemEffectDetails : undefined,
-      planInfo,
+      paidStandInfo: paidStandInfo ? { cost: paidStandInfo.paidStandCost, count: paidStandInfo.paidStandCount } : undefined,
       boomerangReflect: boomerangAmount > 0 ? boomerangAmount : undefined,
     }
     return {
