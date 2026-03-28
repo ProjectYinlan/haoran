@@ -334,9 +334,10 @@ export function rollEvents(ctx: EventContext & {
     return { results: [r], mergedEffect: r.effect }
   }
 
-  if (Math.random() > ctx.eventChance) return empty
+  const coffeeEventBoost = Math.min((ctx.coffeeDebuff ?? 0) * 0.1, 0.35)
+  if (Math.random() > ctx.eventChance + coffeeEventBoost) return empty
 
-  let negativeBoost = (ctx.coffeeDebuff ?? 0) * 0.15 + (ctx.paidStandNegativeBoost ?? 0)
+  let negativeBoost = (ctx.coffeeDebuff ?? 0) * 0.3 + (ctx.paidStandNegativeBoost ?? 0)
   if (ctx.force) negativeBoost += ctx.forceNegativeBoost
   if (isRich) negativeBoost += ctx.richNegativeBoost
 
